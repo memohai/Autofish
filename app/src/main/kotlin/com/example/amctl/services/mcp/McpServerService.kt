@@ -15,7 +15,7 @@ import com.example.amctl.services.accessibility.AccessibilityTreeParser
 import com.example.amctl.services.accessibility.ActionExecutor
 import com.example.amctl.services.accessibility.CompactTreeFormatter
 import com.example.amctl.services.accessibility.ElementFinder
-import com.example.amctl.services.screencapture.ScreenCaptureProvider
+import com.example.amctl.services.system.ToolRouter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +35,7 @@ class McpServerService : Service() {
     @Inject lateinit var compactTreeFormatter: CompactTreeFormatter
     @Inject lateinit var elementFinder: ElementFinder
     @Inject lateinit var actionExecutor: ActionExecutor
-    @Inject lateinit var screenCaptureProvider: ScreenCaptureProvider
+    @Inject lateinit var toolRouter: ToolRouter
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var mcpServer: McpServer? = null
@@ -79,7 +79,7 @@ class McpServerService : Service() {
                     compactTreeFormatter = compactTreeFormatter,
                     elementFinder = elementFinder,
                     actionExecutor = actionExecutor,
-                    screenCaptureProvider = screenCaptureProvider,
+                    toolRouter = toolRouter,
                 )
                 server.start()
                 mcpServer = server

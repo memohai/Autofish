@@ -10,9 +10,12 @@ import com.example.amctl.data.model.ServerStatus
 import com.example.amctl.data.repository.SettingsRepository
 import com.example.amctl.services.accessibility.AmctlAccessibilityService
 import com.example.amctl.services.mcp.McpServerService
+import com.example.amctl.services.system.ShizukuProvider
+import com.example.amctl.services.system.ToolRouter
 import com.example.amctl.utils.NetworkUtils
 import com.example.amctl.utils.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +30,8 @@ class MainViewModel
     constructor(
         private val application: Application,
         private val settingsRepository: SettingsRepository,
+        private val shizukuProvider: ShizukuProvider,
+        private val toolRouter: ToolRouter,
     ) : AndroidViewModel(application) {
 
         val serverConfig: StateFlow<ServerConfig> = settingsRepository.serverConfig
@@ -37,8 +42,36 @@ class MainViewModel
         private val _deviceIp = MutableStateFlow(NetworkUtils.getDeviceIpAddress())
         val deviceIp: StateFlow<String?> = _deviceIp.asStateFlow()
 
+        private val _shizukuStatus = MutableStateFlow(getShizukuStatusText())
+        val shizukuStatus: StateFlow<String> = _shizukuStatus.asStateFlow()
+
+        private val _controlMode = MutableStateFlow(toolRouter.currentMode.name)
+        val controlMode: StateFlow<String> = _controlMode.asStateFlow()
+
+        companion object {
+            private const val SHIZUKU_PERMISSION_REQUEST_CODE = 1001
+            private const val STATUS_POLL_INTERVAL_MS = 3000L
+        }
+
+        init {
+            viewModelScope.launch {
+                while (true) {
+                    delay(STATUS_POLL_INTERVAL_MS)
+                    refreshShizukuStatus()
+                }
+            }
+        }
+
         fun isAccessibilityEnabled(): Boolean =
             PermissionUtils.isAccessibilityServiceEnabled(application, AmctlAccessibilityService::class.java)
+
+        fun requestShizukuPermission() {
+            shizukuProvider.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+            viewModelScope.launch {
+                delay(1000)
+                refreshShizukuStatus()
+            }
+        }
 
         fun startServer() {
             val intent = Intent(application, McpServerService::class.java).apply {
@@ -70,5 +103,17 @@ class MainViewModel
 
         fun refreshDeviceIp() {
             _deviceIp.value = NetworkUtils.getDeviceIpAddress()
+        }
+
+        private fun refreshShizukuStatus() {
+            _shizukuStatus.value = getShizukuStatusText()
+            _controlMode.value = toolRouter.currentMode.name
+        }
+
+        private fun getShizukuStatusText(): String = when {
+            shizukuProvider.isAvailable() -> "Authorized"
+            shizukuProvider.isInstalled() && !shizukuProvider.hasPermission() -> "Not Authorized"
+            shizukuProvider.isInstalled() -> "Running (checking permission...)"
+            else -> "Not Running"
         }
     }

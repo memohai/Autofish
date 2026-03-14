@@ -3,6 +3,7 @@ package com.example.amctl.mcp.tools
 import com.example.amctl.services.accessibility.ActionExecutor
 import com.example.amctl.services.accessibility.ScrollAmount
 import com.example.amctl.services.accessibility.ScrollDirection
+import com.example.amctl.services.system.ToolRouter
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
@@ -14,15 +15,15 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
 object TouchActionTools {
-    fun register(server: Server, actionExecutor: ActionExecutor) {
-        registerTap(server, actionExecutor)
-        registerLongPress(server, actionExecutor)
-        registerDoubleTap(server, actionExecutor)
-        registerSwipe(server, actionExecutor)
-        registerScroll(server, actionExecutor)
+    fun register(server: Server, toolRouter: ToolRouter) {
+        registerTap(server, toolRouter)
+        registerLongPress(server, toolRouter)
+        registerDoubleTap(server, toolRouter)
+        registerSwipe(server, toolRouter)
+        registerScroll(server, toolRouter)
     }
 
-    private fun registerTap(server: Server, executor: ActionExecutor) {
+    private fun registerTap(server: Server, router: ToolRouter) {
         server.addTool(
             name = "amctl_tap",
             description = "Single tap at coordinates",
@@ -36,11 +37,11 @@ object TouchActionTools {
         ) { request ->
             val x = request.arguments?.get("x")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing x")
             val y = request.arguments?.get("y")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing y")
-            executor.tap(x, y).toCallToolResult("Tapped at ($x, $y)")
+            router.tap(x, y).toCallToolResult("Tapped at ($x, $y)")
         }
     }
 
-    private fun registerLongPress(server: Server, executor: ActionExecutor) {
+    private fun registerLongPress(server: Server, router: ToolRouter) {
         server.addTool(
             name = "amctl_long_press",
             description = "Long press at coordinates",
@@ -56,11 +57,11 @@ object TouchActionTools {
             val x = request.arguments?.get("x")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing x")
             val y = request.arguments?.get("y")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing y")
             val duration = request.arguments?.get("duration")?.jsonPrimitive?.long ?: ActionExecutor.DEFAULT_LONG_PRESS_DURATION_MS
-            executor.longPress(x, y, duration).toCallToolResult("Long pressed at ($x, $y) for ${duration}ms")
+            router.longPress(x, y, duration).toCallToolResult("Long pressed at ($x, $y) for ${duration}ms")
         }
     }
 
-    private fun registerDoubleTap(server: Server, executor: ActionExecutor) {
+    private fun registerDoubleTap(server: Server, router: ToolRouter) {
         server.addTool(
             name = "amctl_double_tap",
             description = "Double tap at coordinates",
@@ -74,11 +75,11 @@ object TouchActionTools {
         ) { request ->
             val x = request.arguments?.get("x")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing x")
             val y = request.arguments?.get("y")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing y")
-            executor.doubleTap(x, y).toCallToolResult("Double tapped at ($x, $y)")
+            router.doubleTap(x, y).toCallToolResult("Double tapped at ($x, $y)")
         }
     }
 
-    private fun registerSwipe(server: Server, executor: ActionExecutor) {
+    private fun registerSwipe(server: Server, router: ToolRouter) {
         server.addTool(
             name = "amctl_swipe",
             description = "Swipe from (x1,y1) to (x2,y2)",
@@ -98,11 +99,11 @@ object TouchActionTools {
             val x2 = request.arguments?.get("x2")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing x2")
             val y2 = request.arguments?.get("y2")?.jsonPrimitive?.float ?: return@addTool errorResult("Missing y2")
             val duration = request.arguments?.get("duration")?.jsonPrimitive?.long ?: ActionExecutor.DEFAULT_SWIPE_DURATION_MS
-            executor.swipe(x1, y1, x2, y2, duration).toCallToolResult("Swiped ($x1,$y1) -> ($x2,$y2)")
+            router.swipe(x1, y1, x2, y2, duration).toCallToolResult("Swiped ($x1,$y1) -> ($x2,$y2)")
         }
     }
 
-    private fun registerScroll(server: Server, executor: ActionExecutor) {
+    private fun registerScroll(server: Server, router: ToolRouter) {
         server.addTool(
             name = "amctl_scroll",
             description = "Scroll in a direction",
@@ -118,7 +119,7 @@ object TouchActionTools {
             val direction = try { ScrollDirection.valueOf(dirStr.uppercase()) } catch (_: Exception) { return@addTool errorResult("Invalid direction: $dirStr") }
             val amountStr = request.arguments?.get("amount")?.jsonPrimitive?.content ?: "medium"
             val amount = try { ScrollAmount.valueOf(amountStr.uppercase()) } catch (_: Exception) { ScrollAmount.MEDIUM }
-            executor.scroll(direction, amount).toCallToolResult("Scrolled $direction ($amountStr)")
+            router.scroll(direction, amount).toCallToolResult("Scrolled $direction ($amountStr)")
         }
     }
 }

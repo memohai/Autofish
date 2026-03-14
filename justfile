@@ -4,7 +4,12 @@ set dotenv-load := true
 
 ANDROID_HOME := env("ANDROID_HOME", "~/Android/Sdk")
 GRADLE := "./gradlew"
-ADB := "adb"
+ADB_DEVICE := env("ADB_DEVICE", "")
+ADB := if ADB_DEVICE != "" { "adb -s " + ADB_DEVICE } else { "adb" }
+SHIZUKU_VERSION := "13.6.0"
+SHIZUKU_APK := "shizuku-v" + SHIZUKU_VERSION + ".apk"
+SHIZUKU_URL := "https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk"
+
 APP_ID := "com.example.amctl"
 APP_ID_DEBUG := APP_ID + ".debug"
 EMULATOR_NAME := "amctl_test"
@@ -116,7 +121,7 @@ emulator-headless ram=EMULATOR_RAM:
 # Start emulator with graphical UI
 emulator-ui ram=EMULATOR_RAM:
     @echo "Starting emulator '{{ EMULATOR_NAME }}' with UI (RAM={{ ram }}MB)..."
-    emulator -avd {{ EMULATOR_NAME }} -memory {{ ram }} -no-snapshot -no-metrics &
+    QT_QPA_PLATFORM=xcb emulator -avd {{ EMULATOR_NAME }} -memory {{ ram }} -no-snapshot -no-metrics &
     @echo "Waiting for emulator to boot..."
     {{ ADB }} wait-for-device
     @while [ "$({{ ADB }} shell getprop sys.boot_completed 2>/dev/null)" != "1" ]; do sleep 2; done
@@ -126,6 +131,43 @@ emulator-ui ram=EMULATOR_RAM:
 emulator-stop:
     -{{ ADB }} -s emulator-5554 emu kill
     @echo "Emulator stopped."
+
+# ─── Shizuku ─────────────────────────────────────────────────────────────────
+
+# Download Shizuku APK
+shizuku-download:
+    @if [ ! -f "{{ SHIZUKU_APK }}" ]; then \
+        echo "Downloading Shizuku v{{ SHIZUKU_VERSION }}..."; \
+        wget -cO "{{ SHIZUKU_APK }}" "{{ SHIZUKU_URL }}"; \
+    else \
+        echo "{{ SHIZUKU_APK }} already exists."; \
+    fi
+
+# Install Shizuku on device
+shizuku-install: shizuku-download
+    {{ ADB }} install -r "{{ SHIZUKU_APK }}"
+    @echo "Shizuku installed."
+
+# Start Shizuku service via adb
+shizuku-start:
+    {{ ADB }} shell sh /sdcard/Android/data/moe.shizuku.privileged.api/start.sh
+    @echo "Shizuku service started."
+
+# Check Shizuku status
+shizuku-status:
+    @echo "=== Shizuku Status ==="
+    @{{ ADB }} shell dumpsys activity services | grep -i shizuku || echo "Shizuku service not found"
+    @echo ""
+    @{{ ADB }} shell pm list packages | grep shizuku || echo "Shizuku not installed"
+
+# Full Shizuku setup: download + install + start
+shizuku-setup: shizuku-install shizuku-start
+
+# ─── Device Selection ────────────────────────────────────────────────────────
+
+# List connected devices
+devices:
+    @adb devices -l
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 

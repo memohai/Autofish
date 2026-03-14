@@ -6,6 +6,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,8 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
     val serverConfig by viewModel.serverConfig.collectAsState()
     val serverStatus by viewModel.serverStatus.collectAsState()
     val deviceIp by viewModel.deviceIp.collectAsState()
+    val shizukuStatus by viewModel.shizukuStatus.collectAsState()
+    val controlMode by viewModel.controlMode.collectAsState()
     val context = LocalContext.current
     val isRunning = serverStatus is ServerStatus.Running
 
@@ -66,6 +70,39 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                 onBindingAddressChange = viewModel::updateBindingAddress,
                 onRegenerateToken = viewModel::generateNewBearerToken,
             )
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Control Mode", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "  $controlMode",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (controlMode != "ACCESSIBILITY") {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+
+                    Text("Shizuku", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = shizukuStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = when {
+                            shizukuStatus.contains("Authorized") -> MaterialTheme.colorScheme.primary
+                            shizukuStatus.contains("Not") -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    if (shizukuStatus.contains("Not Authorized")) {
+                        Button(onClick = { viewModel.requestShizukuPermission() }) {
+                            Text("Request Shizuku Permission")
+                        }
+                    }
+                }
+            }
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

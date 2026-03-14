@@ -12,6 +12,10 @@ import com.example.amctl.services.accessibility.ActionExecutor
 import com.example.amctl.services.accessibility.ActionExecutorImpl
 import com.example.amctl.services.screencapture.ScreenCaptureProvider
 import com.example.amctl.services.screencapture.ScreenCaptureProviderImpl
+import com.example.amctl.services.system.AppController
+import com.example.amctl.services.system.AppControllerImpl
+import com.example.amctl.services.system.ShizukuProvider
+import com.example.amctl.services.system.ShizukuProviderImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -67,4 +71,12 @@ abstract class ServiceModule {
     @Binds
     @Singleton
     abstract fun bindScreenCaptureProvider(impl: ScreenCaptureProviderImpl): ScreenCaptureProvider
+
+    @Binds
+    @Singleton
+    abstract fun bindShizukuProvider(impl: ShizukuProviderImpl): ShizukuProvider
+
+    @Binds
+    @Singleton
+    abstract fun bindAppController(impl: AppControllerImpl): AppController
 }

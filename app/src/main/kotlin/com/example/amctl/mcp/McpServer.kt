@@ -1,6 +1,7 @@
 package com.example.amctl.mcp
 
 import com.example.amctl.mcp.auth.BearerTokenAuth
+import com.example.amctl.mcp.tools.AppTools
 import com.example.amctl.mcp.tools.NodeActionTools
 import com.example.amctl.mcp.tools.ScreenIntrospectionTools
 import com.example.amctl.mcp.tools.SystemActionTools
@@ -12,7 +13,7 @@ import com.example.amctl.services.accessibility.AccessibilityTreeParser
 import com.example.amctl.services.accessibility.ActionExecutor
 import com.example.amctl.services.accessibility.CompactTreeFormatter
 import com.example.amctl.services.accessibility.ElementFinder
-import com.example.amctl.services.screencapture.ScreenCaptureProvider
+import com.example.amctl.services.system.ToolRouter
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -40,22 +41,23 @@ class McpServer(
     private val compactTreeFormatter: CompactTreeFormatter,
     private val elementFinder: ElementFinder,
     private val actionExecutor: ActionExecutor,
-    private val screenCaptureProvider: ScreenCaptureProvider,
+    private val toolRouter: ToolRouter,
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
 
     fun start() {
         val mcpSdkServer = Server(
-            Implementation(name = "amctl", version = "0.1.0"),
+            Implementation(name = "amctl", version = "0.2.0"),
             ServerOptions(capabilities = ServerCapabilities(tools = ServerCapabilities.Tools())),
         )
 
-        ScreenIntrospectionTools.register(mcpSdkServer, accessibilityServiceProvider, treeParser, compactTreeFormatter, screenCaptureProvider)
-        TouchActionTools.register(mcpSdkServer, actionExecutor)
+        ScreenIntrospectionTools.register(mcpSdkServer, accessibilityServiceProvider, treeParser, compactTreeFormatter, toolRouter)
+        TouchActionTools.register(mcpSdkServer, toolRouter)
         NodeActionTools.register(mcpSdkServer, actionExecutor, elementFinder, accessibilityServiceProvider, treeParser)
-        TextInputTools.register(mcpSdkServer, actionExecutor, accessibilityServiceProvider, treeParser)
-        SystemActionTools.register(mcpSdkServer, actionExecutor)
+        TextInputTools.register(mcpSdkServer, actionExecutor, accessibilityServiceProvider, treeParser, toolRouter)
+        SystemActionTools.register(mcpSdkServer, toolRouter)
         UtilityTools.register(mcpSdkServer, elementFinder, accessibilityServiceProvider, treeParser)
+        AppTools.register(mcpSdkServer, toolRouter)
 
         server = embeddedServer(
             factory = Netty,

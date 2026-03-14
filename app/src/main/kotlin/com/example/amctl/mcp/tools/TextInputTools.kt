@@ -17,10 +17,11 @@ object TextInputTools {
         actionExecutor: ActionExecutor,
         accessibilityProvider: AccessibilityServiceProvider,
         treeParser: AccessibilityTreeParser,
+        toolRouter: com.example.amctl.services.system.ToolRouter? = null,
     ) {
         registerTypeText(server, actionExecutor, accessibilityProvider, treeParser)
         registerClearText(server, actionExecutor, accessibilityProvider, treeParser)
-        registerPressKey(server, actionExecutor)
+        registerPressKey(server, actionExecutor, toolRouter)
     }
 
     private fun registerTypeText(server: Server, executor: ActionExecutor, provider: AccessibilityServiceProvider, parser: AccessibilityTreeParser) {
@@ -57,7 +58,7 @@ object TextInputTools {
         }
     }
 
-    private fun registerPressKey(server: Server, executor: ActionExecutor) {
+    private fun registerPressKey(server: Server, executor: ActionExecutor, toolRouter: com.example.amctl.services.system.ToolRouter?) {
         server.addTool(
             name = "amctl_press_key",
             description = "Press a key",
@@ -67,11 +68,25 @@ object TextInputTools {
             ),
         ) { request ->
             val key = request.arguments?.get("key")?.jsonPrimitive?.content?.uppercase() ?: return@addTool errorResult("Missing key")
-            when (key) {
-                "BACK" -> executor.pressBack().toCallToolResult("Pressed BACK")
-                "HOME" -> executor.pressHome().toCallToolResult("Pressed HOME")
-                else -> CallToolResult(content = listOf(TextContent(text = "Key '$key' not supported yet")), isError = true)
+            val keyCode = KEY_MAP[key]
+            if (keyCode != null && toolRouter != null) {
+                toolRouter.pressKey(keyCode).toCallToolResult("Pressed $key")
+            } else {
+                when (key) {
+                    "BACK" -> executor.pressBack().toCallToolResult("Pressed BACK")
+                    "HOME" -> executor.pressHome().toCallToolResult("Pressed HOME")
+                    else -> CallToolResult(content = listOf(TextContent(text = "Key '$key' not supported (Shizuku not available)")), isError = true)
+                }
             }
         }
     }
+
+    private val KEY_MAP = mapOf(
+        "ENTER" to android.view.KeyEvent.KEYCODE_ENTER,
+        "BACK" to android.view.KeyEvent.KEYCODE_BACK,
+        "DEL" to android.view.KeyEvent.KEYCODE_DEL,
+        "HOME" to android.view.KeyEvent.KEYCODE_HOME,
+        "TAB" to android.view.KeyEvent.KEYCODE_TAB,
+        "SPACE" to android.view.KeyEvent.KEYCODE_SPACE,
+    )
 }

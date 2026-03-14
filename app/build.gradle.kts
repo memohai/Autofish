@@ -124,6 +124,10 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
+    // Shizuku
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
+
     // Unit Testing
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter.api)
