@@ -70,6 +70,10 @@ android {
             excludes += "/META-INF/LICENSE.md"
             excludes += "/META-INF/LICENSE-notice.md"
         }
+        jniLibs {
+            keepDebugSymbols += "**/libandroidx.graphics.path.so"
+            keepDebugSymbols += "**/libdatastore_shared_counter.so"
+        }
     }
 }
 

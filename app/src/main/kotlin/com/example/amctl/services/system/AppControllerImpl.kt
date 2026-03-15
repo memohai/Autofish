@@ -47,6 +47,57 @@ class AppControllerImpl
             null
         }
 
+        override fun listPackages(filter: String?, thirdPartyOnly: Boolean): Result<List<String>> = try {
+            val flag = if (thirdPartyOnly) "-3" else ""
+            val output = shizukuProvider.exec("pm list packages $flag").trim()
+            val packages = output.lines()
+                .filter { it.startsWith("package:") }
+                .map { it.removePrefix("package:").trim() }
+                .let { list ->
+                    if (filter.isNullOrBlank()) list
+                    else list.filter { it.contains(filter, ignoreCase = true) }
+                }
+                .sorted()
+            Result.success(packages)
+        } catch (e: Exception) {
+            Log.w(TAG, "listPackages failed", e)
+            Result.failure(e)
+        }
+
+        override fun execShell(command: String): Result<String> = try {
+            val output = shizukuProvider.exec(command)
+            Result.success(output)
+        } catch (e: Exception) {
+            Log.w(TAG, "execShell failed: $command", e)
+            Result.failure(e)
+        }
+
+        override fun startIntent(
+            action: String?,
+            dataUri: String?,
+            packageName: String?,
+            component: String?,
+            extras: Map<String, String>?,
+        ): Result<String> = try {
+            val cmd = buildString {
+                append("am start")
+                action?.let { append(" -a ").append(it) }
+                dataUri?.let { append(" -d '").append(it).append("'") }
+                packageName?.let { append(" -p ").append(it) }
+                component?.let { append(" -n ").append(it) }
+                extras?.forEach { (k, v) -> append(" --es '").append(k).append("' '").append(v).append("'") }
+            }
+            val output = shizukuProvider.exec(cmd).trim()
+            if (output.contains("Error") || output.contains("Exception")) {
+                Result.failure(RuntimeException(output))
+            } else {
+                Result.success(output.ifBlank { "Intent started" })
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "startIntent failed", e)
+            Result.failure(e)
+        }
+
         companion object {
             private const val TAG = "amctl:AppCtrl"
             private val ACTIVITY_PATTERN = Regex("""\s(\S+/\S+)\s""")
