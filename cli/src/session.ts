@@ -1,4 +1,11 @@
-import { CliError } from "./errors.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+export interface CommandSession {
+  writeInput(command: string, payload: unknown): Promise<void>;
+  writeOutput(command: string, payload: unknown): Promise<void>;
+  writeError(command: string, payload: unknown): Promise<void>;
+}
 
 interface AgentFsLike {
   fs?: {
@@ -9,49 +16,44 @@ interface AgentFsLike {
   };
 }
 
-export interface CommandSession {
-  writeInput(command: string, payload: unknown): Promise<void>;
-  writeOutput(command: string, payload: unknown): Promise<void>;
-  writeError(command: string, payload: unknown): Promise<void>;
-}
-
 export async function openSession(sessionId: string): Promise<CommandSession> {
   const normalized = sessionId.trim() || "default";
+  const agent = await tryOpenAgentFs(normalized);
+  if (agent) {
+    return {
+      writeInput: (command, payload) => persistAgentFs(agent, normalized, command, "input", payload),
+      writeOutput: (command, payload) => persistAgentFs(agent, normalized, command, "output", payload),
+      writeError: (command, payload) => persistAgentFs(agent, normalized, command, "error", payload),
+    };
+  }
 
-  let AgentFS: { open: (opts: { id: string }) => Promise<AgentFsLike> } | undefined;
+  const baseDir = join(process.cwd(), ".amctl-sessions", normalized, "commands");
+  await mkdir(baseDir, { recursive: true });
+
+  return {
+    writeInput: (command, payload) => persistLocal(baseDir, command, "input", payload),
+    writeOutput: (command, payload) => persistLocal(baseDir, command, "output", payload),
+    writeError: (command, payload) => persistLocal(baseDir, command, "error", payload),
+  };
+}
+
+async function tryOpenAgentFs(sessionId: string): Promise<AgentFsLike | null> {
   try {
     const mod = (await import("agentfs-sdk")) as {
       AgentFS?: { open: (opts: { id: string }) => Promise<AgentFsLike> };
       default?: { open: (opts: { id: string }) => Promise<AgentFsLike> };
     };
-    AgentFS = mod.AgentFS ?? mod.default;
+    const agentFs = mod.AgentFS ?? mod.default;
+    if (!agentFs?.open) {
+      return null;
+    }
+    return await agentFs.open({ id: sessionId });
   } catch {
-    throw new CliError(
-      "INTERNAL_ERROR",
-      "agentfs-sdk is not installed. Run: cd cli && npm install",
-    );
+    return null;
   }
-
-  if (!AgentFS?.open) {
-    throw new CliError("INTERNAL_ERROR", "agentfs-sdk loaded but AgentFS.open is unavailable");
-  }
-
-  const agent = await AgentFS.open({ id: normalized });
-
-  return {
-    async writeInput(command, payload) {
-      await persist(agent, normalized, command, "input", payload);
-    },
-    async writeOutput(command, payload) {
-      await persist(agent, normalized, command, "output", payload);
-    },
-    async writeError(command, payload) {
-      await persist(agent, normalized, command, "error", payload);
-    },
-  };
 }
 
-async function persist(
+async function persistAgentFs(
   agent: AgentFsLike,
   sessionId: string,
   command: string,
@@ -70,4 +72,16 @@ async function persist(
   if (agent.kv?.set) {
     await agent.kv.set(`amctl/${sessionId}/latest/${safeCmd}/${phase}`, payload);
   }
+}
+
+async function persistLocal(
+  baseDir: string,
+  command: string,
+  phase: "input" | "output" | "error",
+  payload: unknown,
+): Promise<void> {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeCmd = command.replace(/[^a-zA-Z0-9:_-]/g, "_");
+  const file = join(baseDir, `${ts}_${safeCmd}_${phase}.json`);
+  await writeFile(file, JSON.stringify(payload, null, 2), "utf8");
 }

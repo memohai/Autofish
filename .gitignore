@@ -23,4 +23,4 @@ local.properties
 
 node_modules/
 dist/
-
+.amctl-sessions/

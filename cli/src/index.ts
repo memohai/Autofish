@@ -14,7 +14,7 @@ import { openSession } from "./session.js";
 const program = new Command();
 
 program
-  .name("amctl-cli")
+  .name("amc")
   .description("Deterministic executor for amctl REST API")
   .option("--base-url <url>", "amctl REST base URL", process.env.AMCTL_BASE_URL ?? "http://127.0.0.1:8081")
   .option("--token <token>", "Bearer token (or AMCTL_TOKEN env)", process.env.AMCTL_TOKEN)

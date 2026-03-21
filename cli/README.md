@@ -1,4 +1,4 @@
-# amctl CLI (TypeScript)
+# amc CLI (TypeScript)
 
 面向 `memoh -> cli -> api -> server` 的 deterministic 执行器。
 当前已接入 AgentFS，会将每次命令的输入/输出/错误写入会话存储，便于审计和复盘。
@@ -17,6 +17,13 @@
 cd cli
 npm install
 npm run build
+npm link
+```
+
+然后可直接使用：
+
+```bash
+amc --help
 ```
 
 ## 全局参数
@@ -30,19 +37,19 @@ npm run build
 
 ```bash
 # 1) 预检
-node dist/index.js preflight --base-url http://127.0.0.1:8081
+amc preflight --base-url http://127.0.0.1:8081
 
 # 2) 点击
-node dist/index.js act:tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --x 540 --y 1200
+amc act:tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --x 540 --y 1200
 
 # 3) 校验文案存在
-node dist/index.js verify:text-contains --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --text "设置"
+amc verify:text-contains --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --text "设置"
 
 # 4) 恢复到主页
-node dist/index.js recover:home --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN"
+amc recover:home --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN"
 
 # 5) 指定 agentfs 会话
-node dist/index.js act:tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --session task-001 --x 540 --y 1200
+amc act:tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKEN" --session task-001 --x 540 --y 1200
 ```
 
 ## 输出约定
@@ -72,3 +79,7 @@ node dist/index.js act:tap --base-url http://127.0.0.1:8081 --token "$AMCTL_TOKE
 并更新最新状态键：
 
 - `amctl/<session>/latest/<command>/input|output|error`
+
+如果运行环境无法加载 `agentfs-sdk`，CLI 会自动回退到本地目录：
+
+- `.amctl-sessions/<session>/commands/*.json`
