@@ -97,12 +97,18 @@ class RestServerService : Service() {
     private fun stopServer() {
         _serverStatus.value = ServerStatus.Stopping
         ServiceLogBus.info("REST", "Stop requested")
-        restServer?.stop()
-        restServer = null
-        _serverStatus.value = ServerStatus.Stopped
-        ServiceLogBus.info("REST", "Stopped")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        serviceScope.launch {
+            runCatching { restServer?.stop() }
+                .onFailure { e ->
+                    Log.e(TAG, "Failed to stop REST server", e)
+                    ServiceLogBus.error("REST", "Stop failed: ${e.message ?: "Unknown error"}")
+                }
+            restServer = null
+            _serverStatus.value = ServerStatus.Stopped
+            ServiceLogBus.info("REST", "Stopped")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {

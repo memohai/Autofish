@@ -5,15 +5,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.amctl.R
 import com.example.amctl.data.model.ServerStatus
@@ -27,6 +34,12 @@ fun ServerStatusCard(
 ) {
     val isRunning = serverStatus is ServerStatus.Running
     val isTransitioning = serverStatus is ServerStatus.Starting || serverStatus is ServerStatus.Stopping
+    val interactionSource = remember { MutableInteractionSource() }
+    val stateDesc = if (isRunning) {
+        stringResource(R.string.enabled)
+    } else {
+        stringResource(R.string.disabled)
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -41,6 +54,17 @@ fun ServerStatusCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .toggleable(
+                    value = isRunning,
+                    enabled = !isTransitioning,
+                    role = Role.Switch,
+                    interactionSource = interactionSource,
+                    indication = ripple(),
+                    onValueChange = onToggle,
+                )
+                .semantics(mergeDescendants = true) {
+                    stateDescription = stateDesc
+                }
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -68,7 +92,7 @@ fun ServerStatusCard(
             }
             Switch(
                 checked = isRunning,
-                onCheckedChange = onToggle,
+                onCheckedChange = null,
                 enabled = !isTransitioning,
             )
         }

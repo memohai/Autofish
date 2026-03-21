@@ -100,12 +100,18 @@ class McpServerService : Service() {
     private fun stopServer() {
         _serverStatus.value = ServerStatus.Stopping
         ServiceLogBus.info("MCP", "Stop requested")
-        mcpServer?.stop()
-        mcpServer = null
-        _serverStatus.value = ServerStatus.Stopped
-        ServiceLogBus.info("MCP", "Stopped")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        serviceScope.launch {
+            runCatching { mcpServer?.stop() }
+                .onFailure { e ->
+                    Log.e(TAG, "Failed to stop MCP server", e)
+                    ServiceLogBus.error("MCP", "Stop failed: ${e.message ?: "Unknown error"}")
+                }
+            mcpServer = null
+            _serverStatus.value = ServerStatus.Stopped
+            ServiceLogBus.info("MCP", "Stopped")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
