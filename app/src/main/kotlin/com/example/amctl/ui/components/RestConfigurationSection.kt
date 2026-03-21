@@ -39,7 +39,7 @@ fun RestConfigurationSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("REST API Configuration", style = MaterialTheme.typography.titleMedium)
+            Text("REST API Settings", style = MaterialTheme.typography.titleMedium)
 
             OutlinedTextField(
                 value = config.restPort.toString(),
@@ -51,7 +51,7 @@ fun RestConfigurationSection(
                 singleLine = true,
             )
 
-            Text("Bearer Token", style = MaterialTheme.typography.labelLarge)
+            Text("Token", style = MaterialTheme.typography.labelLarge)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),

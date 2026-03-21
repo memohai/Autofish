@@ -44,7 +44,7 @@ fun ConfigurationSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Configuration", style = MaterialTheme.typography.titleMedium)
+            Text("MCP Server Settings", style = MaterialTheme.typography.titleMedium)
 
             OutlinedTextField(
                 value = config.port.toString(),
@@ -56,23 +56,28 @@ fun ConfigurationSection(
                 singleLine = true,
             )
 
-            Text("Binding Address", style = MaterialTheme.typography.labelLarge)
+            Text("Who Can Connect", style = MaterialTheme.typography.labelLarge)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
                     selected = config.bindingAddress == BindingAddress.LOCALHOST,
                     onClick = { onBindingAddressChange(BindingAddress.LOCALHOST) },
                     enabled = !isServerRunning,
                 )
-                Text("Localhost (127.0.0.1)", modifier = Modifier.padding(end = 16.dp))
+                Text("Only this device", modifier = Modifier.padding(end = 16.dp))
                 RadioButton(
                     selected = config.bindingAddress == BindingAddress.ALL_INTERFACES,
                     onClick = { onBindingAddressChange(BindingAddress.ALL_INTERFACES) },
                     enabled = !isServerRunning,
                 )
-                Text("All interfaces (0.0.0.0)")
+                Text("Allow LAN devices")
             }
+            Text(
+                text = "Only this device = 127.0.0.1; Allow LAN devices = 0.0.0.0",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
-            Text("Bearer Token", style = MaterialTheme.typography.labelLarge)
+            Text("Token", style = MaterialTheme.typography.labelLarge)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),

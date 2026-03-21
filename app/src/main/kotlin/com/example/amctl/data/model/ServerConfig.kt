@@ -1,5 +1,16 @@
 package com.example.amctl.data.model
 
+enum class AppLanguage {
+    SYSTEM,
+    ENGLISH,
+    CHINESE,
+}
+
+enum class AppThemeMode {
+    LIGHT,
+    DARK,
+}
+
 data class ServerConfig(
     val port: Int = DEFAULT_MCP_PORT,
     val bindingAddress: BindingAddress = BindingAddress.LOCALHOST,
@@ -7,6 +18,8 @@ data class ServerConfig(
     val autoStartOnBoot: Boolean = false,
     val restPort: Int = DEFAULT_REST_PORT,
     val restBearerToken: String = "",
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    val appThemeMode: AppThemeMode = AppThemeMode.LIGHT,
 ) {
     companion object {
         const val DEFAULT_MCP_PORT = 8080

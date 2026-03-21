@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.amctl.data.model.BindingAddress
+import com.example.amctl.data.model.AppLanguage
+import com.example.amctl.data.model.AppThemeMode
 import com.example.amctl.data.model.ServerConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -73,6 +75,14 @@ class SettingsRepositoryImpl
             return token
         }
 
+        override suspend fun updateAppLanguage(language: AppLanguage) {
+            dataStore.edit { it[APP_LANGUAGE_KEY] = language.name }
+        }
+
+        override suspend fun updateAppThemeMode(themeMode: AppThemeMode) {
+            dataStore.edit { it[APP_THEME_MODE_KEY] = themeMode.name }
+        }
+
         override fun validatePort(port: Int): Result<Int> =
             if (port in ServerConfig.MIN_PORT..ServerConfig.MAX_PORT) {
                 Result.success(port)
@@ -86,6 +96,8 @@ class SettingsRepositoryImpl
 
         private fun mapPreferencesToServerConfig(prefs: Preferences): ServerConfig {
             val bindingAddressName = prefs[BINDING_ADDRESS_KEY] ?: BindingAddress.LOCALHOST.name
+            val appLanguageName = prefs[APP_LANGUAGE_KEY] ?: AppLanguage.SYSTEM.name
+            val appThemeModeName = prefs[APP_THEME_MODE_KEY] ?: AppThemeMode.LIGHT.name
             return ServerConfig(
                 port = prefs[PORT_KEY] ?: ServerConfig.DEFAULT_MCP_PORT,
                 bindingAddress =
@@ -95,6 +107,8 @@ class SettingsRepositoryImpl
                 autoStartOnBoot = prefs[AUTO_START_KEY] ?: false,
                 restPort = prefs[REST_PORT_KEY] ?: ServerConfig.DEFAULT_REST_PORT,
                 restBearerToken = prefs[REST_BEARER_TOKEN_KEY] ?: "",
+                appLanguage = AppLanguage.entries.firstOrNull { it.name == appLanguageName } ?: AppLanguage.SYSTEM,
+                appThemeMode = AppThemeMode.entries.firstOrNull { it.name == appThemeModeName } ?: AppThemeMode.LIGHT,
             )
         }
 
@@ -105,5 +119,7 @@ class SettingsRepositoryImpl
             private val AUTO_START_KEY = booleanPreferencesKey("auto_start_on_boot")
             private val REST_PORT_KEY = intPreferencesKey("rest_port")
             private val REST_BEARER_TOKEN_KEY = stringPreferencesKey("rest_bearer_token")
+            private val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
+            private val APP_THEME_MODE_KEY = stringPreferencesKey("app_theme_mode")
         }
     }

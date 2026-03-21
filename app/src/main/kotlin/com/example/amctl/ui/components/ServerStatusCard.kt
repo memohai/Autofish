@@ -13,7 +13,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.amctl.R
 import com.example.amctl.data.model.ServerStatus
 
 @Composable
@@ -50,11 +52,15 @@ fun ServerStatusCard(
                 )
                 Text(
                     text = when (serverStatus) {
-                        is ServerStatus.Stopped -> "Stopped"
-                        is ServerStatus.Starting -> "Starting..."
-                        is ServerStatus.Running -> "Running on ${serverStatus.address}:${serverStatus.port}"
-                        is ServerStatus.Stopping -> "Stopping..."
-                        is ServerStatus.Error -> "Error: ${serverStatus.message}"
+                        is ServerStatus.Stopped -> stringResource(R.string.server_stopped)
+                        is ServerStatus.Starting -> stringResource(R.string.server_starting)
+                        is ServerStatus.Running -> stringResource(
+                            R.string.server_running_format,
+                            serverStatus.address,
+                            serverStatus.port,
+                        )
+                        is ServerStatus.Stopping -> stringResource(R.string.server_stopping)
+                        is ServerStatus.Error -> stringResource(R.string.server_error_format, serverStatus.message)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

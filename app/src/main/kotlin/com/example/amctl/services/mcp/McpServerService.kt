@@ -15,6 +15,7 @@ import com.example.amctl.services.accessibility.AccessibilityTreeParser
 import com.example.amctl.services.accessibility.ActionExecutor
 import com.example.amctl.services.accessibility.CompactTreeFormatter
 import com.example.amctl.services.accessibility.ElementFinder
+import com.example.amctl.services.logging.ServiceLogBus
 import com.example.amctl.services.system.ToolRouter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -64,6 +65,7 @@ class McpServerService : Service() {
     @Suppress("TooGenericExceptionCaught")
     private fun startServer() {
         _serverStatus.value = ServerStatus.Starting
+        ServiceLogBus.info("MCP", "Start requested")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
@@ -85,9 +87,11 @@ class McpServerService : Service() {
                 mcpServer = server
                 _serverStatus.value = ServerStatus.Running(config.port, config.bindingAddress.address)
                 Log.i(TAG, "MCP server started on ${config.bindingAddress.address}:${config.port}")
+                ServiceLogBus.info("MCP", "Started on ${config.bindingAddress.address}:${config.port}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start MCP server", e)
                 _serverStatus.value = ServerStatus.Error(e.message ?: "Unknown error")
+                ServiceLogBus.error("MCP", "Start failed: ${e.message ?: "Unknown error"}")
                 stopSelf()
             }
         }
@@ -95,9 +99,11 @@ class McpServerService : Service() {
 
     private fun stopServer() {
         _serverStatus.value = ServerStatus.Stopping
+        ServiceLogBus.info("MCP", "Stop requested")
         mcpServer?.stop()
         mcpServer = null
         _serverStatus.value = ServerStatus.Stopped
+        ServiceLogBus.info("MCP", "Stopped")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

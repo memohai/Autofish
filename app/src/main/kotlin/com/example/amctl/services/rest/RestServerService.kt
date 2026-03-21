@@ -14,6 +14,7 @@ import com.example.amctl.services.accessibility.AccessibilityServiceProvider
 import com.example.amctl.services.accessibility.AccessibilityTreeParser
 import com.example.amctl.services.accessibility.CompactTreeFormatter
 import com.example.amctl.services.accessibility.ElementFinder
+import com.example.amctl.services.logging.ServiceLogBus
 import com.example.amctl.services.system.ToolRouter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +63,7 @@ class RestServerService : Service() {
     @Suppress("TooGenericExceptionCaught")
     private fun startServer() {
         _serverStatus.value = ServerStatus.Starting
+        ServiceLogBus.info("REST", "Start requested")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
@@ -82,9 +84,11 @@ class RestServerService : Service() {
                 restServer = server
                 _serverStatus.value = ServerStatus.Running(config.restPort, config.bindingAddress.address)
                 Log.i(TAG, "REST server started on ${config.bindingAddress.address}:${config.restPort}")
+                ServiceLogBus.info("REST", "Started on ${config.bindingAddress.address}:${config.restPort}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start REST server", e)
                 _serverStatus.value = ServerStatus.Error(e.message ?: "Unknown error")
+                ServiceLogBus.error("REST", "Start failed: ${e.message ?: "Unknown error"}")
                 stopSelf()
             }
         }
@@ -92,9 +96,11 @@ class RestServerService : Service() {
 
     private fun stopServer() {
         _serverStatus.value = ServerStatus.Stopping
+        ServiceLogBus.info("REST", "Stop requested")
         restServer?.stop()
         restServer = null
         _serverStatus.value = ServerStatus.Stopped
+        ServiceLogBus.info("REST", "Stopped")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

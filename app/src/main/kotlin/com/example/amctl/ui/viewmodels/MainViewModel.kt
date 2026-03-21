@@ -2,9 +2,12 @@ package com.example.amctl.ui.viewmodels
 
 import android.app.Application
 import android.content.Intent
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.amctl.data.model.BindingAddress
+import com.example.amctl.data.model.AppLanguage
+import com.example.amctl.data.model.AppThemeMode
 import com.example.amctl.data.model.ServerConfig
 import com.example.amctl.data.model.ServerStatus
 import com.example.amctl.data.repository.SettingsRepository
@@ -50,6 +53,10 @@ class MainViewModel
 
         private val _controlMode = MutableStateFlow(toolRouter.currentMode.name)
         val controlMode: StateFlow<String> = _controlMode.asStateFlow()
+        private val _accessibilityEnabled = MutableStateFlow(isAccessibilityEnabledNow())
+        val accessibilityEnabled: StateFlow<Boolean> = _accessibilityEnabled.asStateFlow()
+        private val _notificationsEnabled = MutableStateFlow(NotificationManagerCompat.from(application).areNotificationsEnabled())
+        val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
 
         companion object {
             private const val SHIZUKU_PERMISSION_REQUEST_CODE = 1001
@@ -60,19 +67,16 @@ class MainViewModel
             viewModelScope.launch {
                 while (true) {
                     delay(STATUS_POLL_INTERVAL_MS)
-                    refreshShizukuStatus()
+                    refreshStatuses()
                 }
             }
         }
-
-        fun isAccessibilityEnabled(): Boolean =
-            PermissionUtils.isAccessibilityServiceEnabled(application, AmctlAccessibilityService::class.java)
 
         fun requestShizukuPermission() {
             shizukuProvider.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
             viewModelScope.launch {
                 delay(1000)
-                refreshShizukuStatus()
+                refreshStatuses()
             }
         }
 
@@ -128,14 +132,36 @@ class MainViewModel
             viewModelScope.launch { settingsRepository.generateNewRestBearerToken() }
         }
 
+        fun updateAppLanguage(language: AppLanguage) {
+            viewModelScope.launch { settingsRepository.updateAppLanguage(language) }
+        }
+
+        fun updateAppThemeMode(themeMode: AppThemeMode) {
+            viewModelScope.launch { settingsRepository.updateAppThemeMode(themeMode) }
+        }
+
+        fun restartApp() {
+            val intent = application.packageManager.getLaunchIntentForPackage(application.packageName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                application.startActivity(intent)
+                Runtime.getRuntime().exit(0)
+            }
+        }
+
         fun refreshDeviceIp() {
             _deviceIp.value = NetworkUtils.getDeviceIpAddress()
         }
 
-        private fun refreshShizukuStatus() {
+        private fun refreshStatuses() {
             _shizukuStatus.value = getShizukuStatusText()
             _controlMode.value = toolRouter.currentMode.name
+            _accessibilityEnabled.value = isAccessibilityEnabledNow()
+            _notificationsEnabled.value = NotificationManagerCompat.from(application).areNotificationsEnabled()
         }
+
+        private fun isAccessibilityEnabledNow(): Boolean =
+            PermissionUtils.isAccessibilityServiceEnabled(application, AmctlAccessibilityService::class.java)
 
         private fun getShizukuStatusText(): String = when {
             shizukuProvider.isAvailable() -> "Authorized"

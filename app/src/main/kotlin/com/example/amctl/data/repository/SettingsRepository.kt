@@ -1,6 +1,8 @@
 package com.example.amctl.data.repository
 
 import com.example.amctl.data.model.BindingAddress
+import com.example.amctl.data.model.AppLanguage
+import com.example.amctl.data.model.AppThemeMode
 import com.example.amctl.data.model.ServerConfig
 import kotlinx.coroutines.flow.Flow
 
@@ -16,6 +18,8 @@ interface SettingsRepository {
     suspend fun updateRestPort(port: Int)
     suspend fun updateRestBearerToken(token: String)
     suspend fun generateNewRestBearerToken(): String
+    suspend fun updateAppLanguage(language: AppLanguage)
+    suspend fun updateAppThemeMode(themeMode: AppThemeMode)
 
     fun validatePort(port: Int): Result<Int>
 }
