@@ -155,21 +155,55 @@ fn run_command(
             ),
         },
         Commands::Observe { command } => match command {
-            ObserveCommands::Screen {
-                full,
-                max_rows,
-                fields,
-            } => into_output(
+            ObserveCommands::Screen { mode, max_rows, fields } => into_output(
                 &runtime.session_id,
                 "observe",
                 "screen",
-                handle_observe_screen(&api, *full, *max_rows, fields),
+                handle_observe_screen(&api, mode, *max_rows, fields),
             ),
-            ObserveCommands::Screenshot { max_dim, quality } => into_output(
+            ObserveCommands::Overlay {
+                enabled,
+                max_marks,
+                interactive_only,
+                auto_refresh,
+                refresh_interval_ms,
+                offset_x,
+                offset_y,
+            } => into_output(
+                &runtime.session_id,
+                "observe",
+                "overlay",
+                handle_observe_overlay(
+                    &api,
+                    *enabled,
+                    *max_marks,
+                    interactive_only.unwrap_or(false),
+                    auto_refresh.unwrap_or(true),
+                    *refresh_interval_ms,
+                    *offset_x,
+                    *offset_y,
+                ),
+            ),
+            ObserveCommands::Screenshot {
+                max_dim,
+                quality,
+                annotate,
+                hide_overlay,
+                max_marks,
+                interactive_only,
+            } => into_output(
                 &runtime.session_id,
                 "observe",
                 "screenshot",
-                handle_observe_screenshot(&api, *max_dim, *quality),
+                handle_observe_screenshot(
+                    &api,
+                    *max_dim,
+                    *quality,
+                    *annotate,
+                    *hide_overlay,
+                    *max_marks,
+                    interactive_only.unwrap_or(false),
+                ),
             ),
             ObserveCommands::Top => into_output(
                 &runtime.session_id,
@@ -378,10 +412,19 @@ fn handle_act_key(api: &ApiClient<'_>, key_code: i32) -> CommandResult {
 
 fn handle_observe_screen(
     api: &ApiClient<'_>,
-    full: bool,
+    mode: &str,
     max_rows: usize,
     fields: &str,
 ) -> CommandResult {
+    let full = match mode {
+        "compact" => false,
+        "full" => true,
+        _ => {
+            return Err(CommandError::invalid_params(
+                "mode must be compact or full",
+            ));
+        }
+    };
     let screen = api.screen().map_err(CommandError::from)?;
     let total_rows = screen.rows.len();
     if full {
@@ -420,11 +463,61 @@ fn handle_observe_screen(
     )
 }
 
-fn handle_observe_screenshot(api: &ApiClient<'_>, max_dim: i64, quality: i64) -> CommandResult {
+fn handle_observe_overlay(
+    api: &ApiClient<'_>,
+    enabled: Option<bool>,
+    max_marks: usize,
+    interactive_only: bool,
+    auto_refresh: bool,
+    refresh_interval_ms: u64,
+    offset_x: Option<i32>,
+    offset_y: Option<i32>,
+) -> CommandResult {
+    let state = if let Some(target) = enabled {
+        api.overlay_set(
+            target,
+            max_marks,
+            interactive_only,
+            auto_refresh,
+            refresh_interval_ms,
+            offset_x,
+            offset_y,
+        )
+            .map_err(CommandError::from)?
+    } else {
+        api.overlay_get().map_err(CommandError::from)?
+    };
+    Ok(state.payload)
+}
+
+fn handle_observe_screenshot(
+    api: &ApiClient<'_>,
+    max_dim: i64,
+    quality: i64,
+    annotate: bool,
+    hide_overlay: Option<bool>,
+    max_marks: usize,
+    interactive_only: bool,
+) -> CommandResult {
     let shot = api
-        .screenshot(max_dim, quality)
+        .screenshot(
+            max_dim,
+            quality,
+            annotate,
+            hide_overlay,
+            max_marks,
+            interactive_only,
+        )
         .map_err(CommandError::from)?;
-    Ok(json!({"screenshotBase64": shot.base64, "maxDim": max_dim, "quality": quality}))
+    Ok(json!({
+        "screenshotBase64": shot.base64,
+        "maxDim": max_dim,
+        "quality": quality,
+        "annotate": annotate,
+        "hideOverlay": hide_overlay,
+        "maxMarks": max_marks,
+        "interactiveOnly": interactive_only
+    }))
 }
 
 fn handle_observe_top(api: &ApiClient<'_>) -> CommandResult {

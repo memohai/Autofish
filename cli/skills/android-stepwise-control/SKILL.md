@@ -21,13 +21,14 @@ Always start with:
 1. `health`
 2. `observe top`
 3. `observe screen`
+4. `observe overlay --enabled true --auto-refresh true`
 
 If these are unstable, do not proceed.
 
 ## 1. Core Loop (Step by Step)
 Every action follows the same loop:
 1. Execute one action only.
-2. Observe immediately (`top` + `screen`).
+2. Observe immediately (`top` + `screen`), keep overlay enabled for visual grounding.
 3. Decide the next action from observed state.
 
 No blind action chains.
@@ -64,7 +65,21 @@ amc <command>
 # observe
 amc observe top
 amc observe screen --fields id,text,desc --max-rows 80
+# overlay on (server-side on-screen labels)
+amc observe overlay --enabled true --max-marks 300 --interactive-only false --auto-refresh true --refresh-interval-ms 800 --offset-x 0 --offset-y 0
 # verify
 amc verify text-contains "Bing"
 amc verify node-exists --by text --value "Bing"
+# overlay off
+amc observe overlay --enabled false
 ```
+
+## 7. Overlay Color Legend
+- Green: generic interactive nodes
+- Orange: buttons
+- Cyan: input fields
+- Yellow: selection controls (checkbox/switch/radio)
+- Pink: scroll/list containers
+- Blue: text-bearing non-interactive nodes
+
+Use `--offset-x/--offset-y` to shift overlay when labels overlap critical content.

@@ -146,23 +146,54 @@ pub enum ObserveCommands {
         long_about = "Observe current UI tree snapshot.\n\nOutput includes `hasWebView` and `nodeReliability`.\nWhen `hasWebView=true` or `nodeReliability=low`, node-based verification may be less reliable."
     )]
     Screen {
-        #[arg(long, default_value_t = false)]
-        full: bool,
+        #[arg(long, default_value = "compact")]
+        mode: String,
         #[arg(long = "max-rows", default_value_t = 120)]
         max_rows: usize,
         #[arg(long, default_value = "id,class,text,desc,resId,flags")]
         fields: String,
     },
     #[command(
+        name = "overlay",
+        about = "Get or set server-side accessibility overlay state",
+        long_about = "Manage server-side accessibility overlay used by annotate features.\n\nIf `--enabled` is omitted, this command returns current overlay state.\n\nColor legend:\n- Green: generic interactive nodes\n- Orange: buttons\n- Cyan: input fields\n- Yellow: selection controls (checkbox/switch/radio)\n- Pink: scroll/list containers\n- Blue: text-bearing non-interactive nodes"
+    )]
+    Overlay {
+        #[arg(long)]
+        enabled: Option<bool>,
+        #[arg(long = "max-marks", default_value_t = 300)]
+        max_marks: usize,
+        /// default false: full marks, not only interactive nodes
+        #[arg(long)]
+        interactive_only: Option<bool>,
+        #[arg(long)]
+        auto_refresh: Option<bool>,
+        #[arg(long = "refresh-interval-ms", default_value_t = 800)]
+        refresh_interval_ms: u64,
+        #[arg(long = "offset-x")]
+        offset_x: Option<i32>,
+        #[arg(long = "offset-y")]
+        offset_y: Option<i32>,
+    },
+    #[command(
         name = "screenshot",
         about = "Capture a compressed screenshot",
-        long_about = "Capture a compressed screenshot.\n\n`max-dim` limits the long edge of the image.\n`quality` is JPEG quality from 1 to 100 (higher = bigger file).\nThis command does not support `--full`."
+        long_about = "Capture a compressed screenshot.\n\n`max-dim` limits the long edge of the image.\n`quality` is JPEG quality from 1 to 100 (higher = bigger file).\nUse `--annotate` to include server-side overlay marks in screenshot."
     )]
     Screenshot {
         #[arg(long = "max-dim", default_value_t = 700)]
         max_dim: i64,
         #[arg(long, default_value_t = 80)]
         quality: i64,
+        #[arg(long, default_value_t = false)]
+        annotate: bool,
+        #[arg(long)]
+        hide_overlay: Option<bool>,
+        #[arg(long = "max-marks", default_value_t = 120)]
+        max_marks: usize,
+        /// default false: include both interactive and text-bearing nodes
+        #[arg(long)]
+        interactive_only: Option<bool>,
     },
     #[command(name = "top")]
     Top,

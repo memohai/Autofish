@@ -132,6 +132,13 @@ class MainViewModel
             viewModelScope.launch { settingsRepository.generateNewRestBearerToken() }
         }
 
+        fun updateRestOverlayVisible(visible: Boolean) {
+            viewModelScope.launch {
+                settingsRepository.updateRestOverlayVisible(visible)
+                RestServerService.setOverlayVisible(visible)
+            }
+        }
+
         fun updateAppLanguage(language: AppLanguage) {
             viewModelScope.launch { settingsRepository.updateAppLanguage(language) }
         }

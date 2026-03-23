@@ -48,11 +48,17 @@ class RestServerService : Service() {
 
         private val _serverStatus = MutableStateFlow<ServerStatus>(ServerStatus.Stopped)
         val serverStatus: StateFlow<ServerStatus> = _serverStatus
+        @Volatile private var runningInstance: RestServerService? = null
+
+        fun setOverlayVisible(visible: Boolean) {
+            runningInstance?.setOverlayVisibleInternal(visible)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        runningInstance = this
         when (intent?.action) {
             ACTION_STOP -> stopServer()
             else -> startServer()
@@ -82,6 +88,7 @@ class RestServerService : Service() {
                 )
                 server.start()
                 restServer = server
+                server.setOverlayVisible(config.restOverlayVisible)
                 _serverStatus.value = ServerStatus.Running(config.restPort, config.bindingAddress.address)
                 Log.i(TAG, "REST server started on ${config.bindingAddress.address}:${config.restPort}")
                 ServiceLogBus.info("REST", "Started on ${config.bindingAddress.address}:${config.restPort}")
@@ -114,9 +121,19 @@ class RestServerService : Service() {
     override fun onDestroy() {
         restServer?.stop()
         restServer = null
+        runningInstance = null
         _serverStatus.value = ServerStatus.Stopped
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun setOverlayVisibleInternal(visible: Boolean) {
+        serviceScope.launch {
+            runCatching { restServer?.setOverlayVisible(visible) }
+                .onFailure { e ->
+                    Log.w(TAG, "Failed to update overlay visible=$visible", e)
+                }
+        }
     }
 
     private fun createNotificationChannel() {

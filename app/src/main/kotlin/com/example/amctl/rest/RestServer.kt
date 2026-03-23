@@ -28,6 +28,10 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 class RestServer(
     private val port: Int,
@@ -42,6 +46,10 @@ class RestServer(
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val overlayManager = OverlayManager()
+    private var overlayScheduler: ScheduledExecutorService? = null
+    @Volatile
+    private var overlayConfig = OverlayConfig()
 
     fun start() {
         server = embeddedServer(Netty, port = port, host = bindAddress) {
@@ -59,6 +67,7 @@ class RestServer(
                     keyRoutes()
                     textRoutes()
                     nodeRoutes()
+                    overlayRoutes()
                     appRoutes()
                 }
             }
@@ -66,8 +75,45 @@ class RestServer(
     }
 
     fun stop() {
+        stopOverlayAutoRefresh()
         server?.stop(gracePeriodMillis = 1000, timeoutMillis = 5000)
         server = null
+    }
+
+    @Synchronized
+    fun setOverlayVisible(visible: Boolean): Result<OverlayStatePayload> {
+        if (!visible) {
+            stopOverlayAutoRefresh()
+            val result = overlayManager.setEnabled(false)
+            if (result.isFailure) {
+                return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay disable failed"))
+            }
+            overlayConfig = overlayConfig.copy(enabled = false)
+            return Result.success(overlayManager.state().toPayload())
+        }
+
+        val snapshot = collectScreenSnapshot()
+        val marks = buildMarks(
+            windows = snapshot.windows,
+            interactiveOnly = overlayConfig.interactiveOnly,
+            maxMarks = overlayConfig.maxMarks,
+        )
+        val result = overlayManager.setEnabled(
+            true,
+            marks,
+            offsetX = overlayConfig.offsetX,
+            offsetY = overlayConfig.offsetY,
+        )
+        if (result.isFailure) {
+            return Result.failure(result.exceptionOrNull() ?: IllegalStateException("Overlay enable failed"))
+        }
+        overlayConfig = overlayConfig.copy(enabled = true)
+        if (overlayConfig.autoRefresh) {
+            startOverlayAutoRefresh()
+        } else {
+            stopOverlayAutoRefresh()
+        }
+        return Result.success(overlayManager.state().toPayload())
     }
 
     @Serializable
@@ -79,51 +125,98 @@ class RestServer(
     @Suppress("LongMethod")
     private fun io.ktor.server.routing.Route.screenRoutes() {
         get("/screen") {
-            val screenInfo = toolRouter.getScreenInfo()
-            val windows = mutableListOf<WindowData>()
-            var degraded = false
-
-            if (accessibilityProvider.isReady()) {
-                val accessibilityWindows = accessibilityProvider.getAccessibilityWindows()
-                if (accessibilityWindows.isNotEmpty()) {
-                    for (window in accessibilityWindows) {
-                        val root = window.root ?: continue
-                        val tree = treeParser.parseTree(root, rootParentId = "root_w${window.id}")
-                        windows.add(
-                            WindowData(
-                                windowId = window.id,
-                                windowType = AccessibilityTreeParser.mapWindowType(window.type),
-                                packageName = root.packageName?.toString(),
-                                title = window.title?.toString(),
-                                layer = window.layer,
-                                focused = window.isFocused,
-                                tree = tree,
-                            ),
-                        )
-                        @Suppress("DEPRECATION") root.recycle()
-                    }
-                } else {
-                    val rootNode = accessibilityProvider.getRootNode()
-                    if (rootNode != null) {
-                        degraded = true
-                        windows.add(WindowData(windowId = 0, windowType = "APPLICATION", packageName = rootNode.packageName?.toString(), focused = true, tree = treeParser.parseTree(rootNode)))
-                        @Suppress("DEPRECATION") rootNode.recycle()
-                    }
-                }
-            } else {
-                degraded = true
-            }
-
-            val modeHeader = "[mode: ${toolRouter.currentMode}]"
-            val result = MultiWindowResult(windows = windows, degraded = degraded)
-            val tsv = "$modeHeader\n${compactTreeFormatter.formatMultiWindow(result, screenInfo)}"
+            val snapshot = collectScreenSnapshot()
+            val result = MultiWindowResult(windows = snapshot.windows, degraded = snapshot.degraded)
+            val modeHeader = "[mode: ${snapshot.mode}]"
+            val tsv = "$modeHeader\n${compactTreeFormatter.formatMultiWindow(result, snapshot.screenInfo)}"
             call.respondText(ok(tsv), ContentType.Application.Json)
+        }
+
+        get("/mark") {
+            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: 120
+            val interactiveOnly = call.request.queryParameters["interactive_only"]?.toBooleanStrictOrNull() ?: true
+            val applyOverlay = call.request.queryParameters["apply_overlay"]?.toBooleanStrictOrNull() ?: false
+            val snapshot = collectScreenSnapshot()
+            val marks = buildMarks(snapshot.windows, interactiveOnly, maxMarks)
+            if (applyOverlay) {
+                val enabledResult = overlayManager.setEnabled(
+                    true,
+                    marks,
+                    offsetX = overlayConfig.offsetX,
+                    offsetY = overlayConfig.offsetY,
+                )
+                if (enabledResult.isFailure) {
+                    call.respondText(
+                        err(enabledResult.exceptionOrNull()?.message ?: "Overlay enable failed"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@get
+                }
+            }
+            val payload = MarkPayload(
+                mode = snapshot.mode,
+                degraded = snapshot.degraded,
+                interactiveOnly = interactiveOnly,
+                maxMarks = maxMarks,
+                markCount = marks.size,
+                overlay = overlayManager.state().toPayload(),
+                marks = marks.map { it.toSerializable() },
+            )
+            call.respondText(ok(json.encodeToString(payload)), ContentType.Application.Json)
         }
 
         get("/screenshot") {
             val maxDim = call.request.queryParameters["max_dim"]?.toIntOrNull() ?: 700
             val quality = call.request.queryParameters["quality"]?.toIntOrNull() ?: 80
+            val annotate = call.request.queryParameters["annotate"]?.toBooleanStrictOrNull() ?: false
+            val hideOverlay = call.request.queryParameters["hide_overlay"]?.toBooleanStrictOrNull() ?: !annotate
+            val maxMarks = call.request.queryParameters["max_marks"]?.toIntOrNull() ?: 120
+            val interactiveOnly = call.request.queryParameters["interactive_only"]?.toBooleanStrictOrNull() ?: true
+
+            val overlayStateBefore = overlayManager.state()
+            val marksBefore = overlayManager.currentMarks()
+            var temporarilyEnabledByAnnotate = false
+            var temporarilyHiddenOverlay = false
+            if (annotate) {
+                val snapshot = collectScreenSnapshot()
+                val marks = buildMarks(snapshot.windows, interactiveOnly, maxMarks)
+                val result = overlayManager.setEnabled(
+                    true,
+                    marks,
+                    offsetX = overlayConfig.offsetX,
+                    offsetY = overlayConfig.offsetY,
+                )
+                if (result.isFailure) {
+                    call.respondText(
+                        err(result.exceptionOrNull()?.message ?: "Overlay annotate failed"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@get
+                }
+                temporarilyEnabledByAnnotate = !overlayStateBefore.enabled
+            }
+            if (hideOverlay && overlayManager.state().enabled) {
+                val result = overlayManager.setEnabled(false)
+                if (result.isSuccess) {
+                    temporarilyHiddenOverlay = overlayStateBefore.enabled
+                }
+            }
+
             val result = toolRouter.captureScreen(quality = quality, maxWidth = maxDim, maxHeight = maxDim)
+
+            if (temporarilyHiddenOverlay) {
+                overlayManager.setEnabled(
+                    true,
+                    marksBefore,
+                    offsetX = overlayConfig.offsetX,
+                    offsetY = overlayConfig.offsetY,
+                )
+            }
+            if (temporarilyEnabledByAnnotate && !overlayStateBefore.enabled) {
+                overlayManager.setEnabled(false)
+            }
             if (result.isSuccess) {
                 val data = result.getOrThrow()
                 call.respondText(ok(data.data), ContentType.Application.Json)
@@ -239,6 +332,295 @@ class RestServer(
             val cy = (b.top + b.bottom) / 2f
             toolRouter.tap(cx, cy).respond(call, "Clicked node ${req.node_id}")
         }
+    }
+
+    @Serializable
+    data class OverlayRequest(
+        val enabled: Boolean,
+        val max_marks: Int = 300,
+        val interactive_only: Boolean = false,
+        val auto_refresh: Boolean = true,
+        val refresh_interval_ms: Long = 800L,
+        val offset_x: Int? = null,
+        val offset_y: Int? = null,
+    )
+
+    data class OverlayConfig(
+        val enabled: Boolean = false,
+        val maxMarks: Int = 300,
+        val interactiveOnly: Boolean = false,
+        val autoRefresh: Boolean = true,
+        val refreshIntervalMs: Long = 800L,
+        val offsetX: Int = 0,
+        val offsetY: Int = 0,
+    )
+
+    @Serializable
+    data class OverlayStatePayload(
+        val available: Boolean,
+        val enabled: Boolean,
+        val markCount: Int,
+        val autoRefresh: Boolean,
+        val refreshIntervalMs: Long,
+        val offsetX: Int,
+        val offsetY: Int,
+    )
+
+    @Serializable
+    data class SerializableMark(
+        val index: Int,
+        val label: String,
+        val bounds: String,
+        val node_id: String,
+        val class_name: String? = null,
+        val text: String? = null,
+        val desc: String? = null,
+        val res_id: String? = null,
+    )
+
+    @Serializable
+    data class MarkPayload(
+        val mode: ToolRouter.Mode,
+        val degraded: Boolean,
+        val interactiveOnly: Boolean,
+        val maxMarks: Int,
+        val markCount: Int,
+        val overlay: OverlayStatePayload,
+        val marks: List<SerializableMark>,
+    )
+
+    private fun io.ktor.server.routing.Route.overlayRoutes() {
+        get("/overlay") {
+            val state = overlayManager.state()
+            call.respondText(ok(json.encodeToString(state.toPayload())), ContentType.Application.Json)
+        }
+        post("/overlay") {
+            val req = call.receive<OverlayRequest>()
+            if (!req.enabled) {
+                stopOverlayAutoRefresh()
+                val result = overlayManager.setEnabled(false)
+                if (result.isFailure) {
+                    call.respondText(
+                        err(result.exceptionOrNull()?.message ?: "Overlay disable failed"),
+                        ContentType.Application.Json,
+                        HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@post
+                }
+                overlayConfig = overlayConfig.copy(enabled = false)
+                call.respondText(
+                    ok(json.encodeToString(overlayManager.state().toPayload())),
+                    ContentType.Application.Json,
+                )
+                return@post
+            }
+            val snapshot = collectScreenSnapshot()
+            val marks = buildMarks(snapshot.windows, req.interactive_only, req.max_marks)
+            val resolvedOffsetX = req.offset_x ?: overlayConfig.offsetX
+            val resolvedOffsetY = req.offset_y ?: overlayConfig.offsetY
+            val result = overlayManager.setEnabled(
+                true,
+                marks,
+                offsetX = resolvedOffsetX,
+                offsetY = resolvedOffsetY,
+            )
+            if (result.isFailure) {
+                call.respondText(
+                    err(result.exceptionOrNull()?.message ?: "Overlay enable failed"),
+                    ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
+                return@post
+            }
+            overlayConfig = OverlayConfig(
+                enabled = true,
+                maxMarks = req.max_marks.coerceAtLeast(1),
+                interactiveOnly = req.interactive_only,
+                autoRefresh = req.auto_refresh,
+                refreshIntervalMs = req.refresh_interval_ms.coerceIn(200L, 5_000L),
+                offsetX = resolvedOffsetX,
+                offsetY = resolvedOffsetY,
+            )
+            if (overlayConfig.autoRefresh) {
+                startOverlayAutoRefresh()
+            } else {
+                stopOverlayAutoRefresh()
+            }
+            call.respondText(
+                ok(json.encodeToString(overlayManager.state().toPayload())),
+                ContentType.Application.Json,
+            )
+        }
+    }
+
+    private data class ScreenSnapshot(
+        val mode: ToolRouter.Mode,
+        val screenInfo: com.example.amctl.services.accessibility.ScreenInfo,
+        val windows: List<WindowData>,
+        val degraded: Boolean,
+    )
+
+    private fun collectScreenSnapshot(): ScreenSnapshot {
+        val screenInfo = toolRouter.getScreenInfo()
+        val windows = mutableListOf<WindowData>()
+        var degraded = false
+
+        if (accessibilityProvider.isReady()) {
+            val accessibilityWindows = accessibilityProvider.getAccessibilityWindows()
+            if (accessibilityWindows.isNotEmpty()) {
+                for (window in accessibilityWindows) {
+                    val root = window.root ?: continue
+                    val tree = treeParser.parseTree(root, rootParentId = "root_w${window.id}")
+                    windows.add(
+                        WindowData(
+                            windowId = window.id,
+                            windowType = AccessibilityTreeParser.mapWindowType(window.type),
+                            packageName = root.packageName?.toString(),
+                            title = window.title?.toString(),
+                            layer = window.layer,
+                            focused = window.isFocused,
+                            tree = tree,
+                        ),
+                    )
+                    @Suppress("DEPRECATION") root.recycle()
+                }
+            } else {
+                val rootNode = accessibilityProvider.getRootNode()
+                if (rootNode != null) {
+                    degraded = true
+                    windows.add(
+                        WindowData(
+                            windowId = 0,
+                            windowType = "APPLICATION",
+                            packageName = rootNode.packageName?.toString(),
+                            focused = true,
+                            tree = treeParser.parseTree(rootNode),
+                        ),
+                    )
+                    @Suppress("DEPRECATION") rootNode.recycle()
+                }
+            }
+        } else {
+            degraded = true
+        }
+
+        return ScreenSnapshot(
+            mode = toolRouter.currentMode,
+            screenInfo = screenInfo,
+            windows = windows,
+            degraded = degraded,
+        )
+    }
+
+    private fun buildMarks(
+        windows: List<WindowData>,
+        interactiveOnly: Boolean,
+        maxMarks: Int,
+    ): List<OverlayMark> {
+        val out = mutableListOf<OverlayMark>()
+        for (window in windows) {
+            if (window.windowType == "ACCESSIBILITY_OVERLAY") {
+                continue
+            }
+            collectMarksRecursive(window.tree, interactiveOnly, out)
+        }
+        val sorted = out.sortedWith(
+            compareBy<OverlayMark> { if (it.interactive) 1 else 0 }
+                .thenByDescending { area(it.bounds) },
+        )
+        return sorted
+            .take(maxMarks.coerceAtLeast(1))
+            .mapIndexed { idx, mark ->
+                val prefix = if (mark.interactive) "C" else "T"
+                mark.copy(index = idx + 1, label = "${prefix}${idx + 1}")
+            }
+    }
+
+    private fun collectMarksRecursive(
+        node: com.example.amctl.services.accessibility.AccessibilityNodeData,
+        interactiveOnly: Boolean,
+        out: MutableList<OverlayMark>,
+    ) {
+        val isInteractive = node.clickable || node.longClickable || node.editable || node.scrollable || node.focusable
+        val hasText = !node.text.isNullOrBlank() || !node.contentDescription.isNullOrBlank()
+        val shouldInclude = if (interactiveOnly) isInteractive else isInteractive || hasText
+        if (shouldInclude && node.visible && area(node.bounds) > 0) {
+            out.add(
+                OverlayMark(
+                    index = 0,
+                    label = "",
+                    interactive = isInteractive,
+                    bounds = node.bounds,
+                    nodeId = node.id,
+                    className = node.className,
+                    text = node.text,
+                    desc = node.contentDescription,
+                    resId = node.resourceId,
+                ),
+            )
+        }
+        for (child in node.children) {
+            collectMarksRecursive(child, interactiveOnly, out)
+        }
+    }
+
+    private fun area(bounds: com.example.amctl.services.accessibility.BoundsData): Int {
+        val w = (bounds.right - bounds.left).coerceAtLeast(0)
+        val h = (bounds.bottom - bounds.top).coerceAtLeast(0)
+        return w * h
+    }
+
+    private fun OverlayMark.toSerializable(): SerializableMark = SerializableMark(
+        index = index,
+        label = label,
+        bounds = "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}",
+        node_id = nodeId,
+        class_name = className,
+        text = text,
+        desc = desc,
+        res_id = resId,
+    )
+
+    private fun OverlayState.toPayload(): OverlayStatePayload = OverlayStatePayload(
+        available = available,
+        enabled = enabled,
+        markCount = markCount,
+        autoRefresh = overlayConfig.autoRefresh && overlayConfig.enabled,
+        refreshIntervalMs = overlayConfig.refreshIntervalMs,
+        offsetX = overlayConfig.offsetX,
+        offsetY = overlayConfig.offsetY,
+    )
+
+    @Synchronized
+    private fun startOverlayAutoRefresh() {
+        stopOverlayAutoRefresh()
+        val scheduler = Executors.newSingleThreadScheduledExecutor()
+        overlayScheduler = scheduler
+        val interval = overlayConfig.refreshIntervalMs.coerceIn(200L, 5_000L)
+        scheduler.scheduleAtFixedRate(
+            {
+                try {
+                    if (!overlayConfig.enabled) return@scheduleAtFixedRate
+                    val snapshot = collectScreenSnapshot()
+                    val marks = buildMarks(
+                        windows = snapshot.windows,
+                        interactiveOnly = overlayConfig.interactiveOnly,
+                        maxMarks = overlayConfig.maxMarks,
+                    )
+                    overlayManager.updateMarks(marks)
+                } catch (_: Exception) {
+                }
+            },
+            interval,
+            interval,
+            TimeUnit.MILLISECONDS,
+        )
+    }
+
+    @Synchronized
+    private fun stopOverlayAutoRefresh() {
+        overlayScheduler?.shutdownNow()
+        overlayScheduler = null
     }
 
     @Serializable data class LaunchRequest(val package_name: String)

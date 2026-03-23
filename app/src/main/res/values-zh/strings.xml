@@ -26,6 +26,8 @@
     <string name="install_date_label">安装日期</string>
     <string name="mcp_server">MCP 服务</string>
     <string name="rest_api_server">REST API 服务</string>
+    <string name="overlay_visible">Overlay 可见</string>
+    <string name="overlay_visible_desc">显示或隐藏服务端在屏幕上的 UI 标注层。</string>
     <string name="control_mode">控制模式</string>
     <string name="shizuku">Shizuku</string>
     <string name="request_shizuku_permission">请求 Shizuku 权限</string>

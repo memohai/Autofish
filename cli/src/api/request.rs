@@ -98,6 +98,11 @@ pub struct ScreenshotResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverlayResponse {
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopActivityResponse {
     pub activity: String,
 }
@@ -225,13 +230,66 @@ impl<'a> ApiClient<'a> {
         })
     }
 
-    pub fn screenshot(&self, max_dim: i64, quality: i64) -> ApiResult<ScreenshotResponse> {
-        let query = [
+    pub fn screenshot(
+        &self,
+        max_dim: i64,
+        quality: i64,
+        annotate: bool,
+        hide_overlay: Option<bool>,
+        max_marks: usize,
+        interactive_only: bool,
+    ) -> ApiResult<ScreenshotResponse> {
+        let mut query = vec![
             ("max_dim", max_dim.to_string()),
             ("quality", quality.to_string()),
+            ("annotate", annotate.to_string()),
+            ("max_marks", max_marks.to_string()),
+            ("interactive_only", interactive_only.to_string()),
         ];
+        if let Some(v) = hide_overlay {
+            query.push(("hide_overlay", v.to_string()));
+        }
         let base64 = self.authed_get_envelope("/api/screenshot", Some(&query))?;
         Ok(ScreenshotResponse { base64 })
+    }
+
+    pub fn overlay_get(&self) -> ApiResult<OverlayResponse> {
+        let raw = self.authed_get_envelope("/api/overlay", None)?;
+        let payload = parse_embedded_json(&raw, "/api/overlay")?;
+        Ok(OverlayResponse { payload })
+    }
+
+    pub fn overlay_set(
+        &self,
+        enabled: bool,
+        max_marks: usize,
+        interactive_only: bool,
+        auto_refresh: bool,
+        refresh_interval_ms: u64,
+        offset_x: Option<i32>,
+        offset_y: Option<i32>,
+    ) -> ApiResult<OverlayResponse> {
+        let mut body = serde_json::Map::new();
+        body.insert("enabled".to_string(), json!(enabled));
+        body.insert("max_marks".to_string(), json!(max_marks));
+        body.insert("interactive_only".to_string(), json!(interactive_only));
+        body.insert("auto_refresh".to_string(), json!(auto_refresh));
+        body.insert(
+            "refresh_interval_ms".to_string(),
+            json!(refresh_interval_ms),
+        );
+        if let Some(v) = offset_x {
+            body.insert("offset_x".to_string(), json!(v));
+        }
+        if let Some(v) = offset_y {
+            body.insert("offset_y".to_string(), json!(v));
+        }
+        let raw = self.authed_post_envelope(
+            "/api/overlay",
+            Some(Value::Object(body)),
+        )?;
+        let payload = parse_embedded_json(&raw, "/api/overlay")?;
+        Ok(OverlayResponse { payload })
     }
 
     pub fn top_activity(&self) -> ApiResult<TopActivityResponse> {
@@ -407,6 +465,16 @@ fn extract_error_message(text: &str) -> Option<String> {
         return Some(msg.to_string());
     }
     None
+}
+
+fn parse_embedded_json(raw: &str, op: &str) -> ApiResult<Value> {
+    serde_json::from_str::<Value>(raw).map_err(|e| {
+        ApiError::new(
+            ApiErrorKind::BadResponse,
+            format!("Unexpected {op} payload format ({e})"),
+        )
+        .with_raw(Some(raw.to_string()))
+    })
 }
 
 fn build_url(base_url: &str, path: &str) -> anyhow::Result<Url> {
