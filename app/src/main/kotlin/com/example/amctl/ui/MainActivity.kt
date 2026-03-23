@@ -3,47 +3,60 @@ package com.example.amctl.ui
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
+import com.example.amctl.R
 import com.example.amctl.data.model.AppLanguage
 import com.example.amctl.data.model.AppThemeMode
 import com.example.amctl.data.repository.SettingsRepository
 import com.example.amctl.ui.screens.HomeScreen
 import com.example.amctl.ui.theme.AmctlTheme
-import com.example.amctl.ui.viewmodels.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
-    private val viewModel: MainViewModel by viewModels()
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface MainActivityEntryPoint {
+        fun settingsRepository(): SettingsRepository
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val entryPoint =
+            EntryPointAccessors.fromApplication(
+                applicationContext,
+                MainActivityEntryPoint::class.java,
+            )
         val initialThemeMode = runBlocking {
-            settingsRepository.serverConfig.first().appThemeMode
+            entryPoint.settingsRepository().getServerConfig().appThemeMode
         }
-        AppCompatDelegate.setDefaultNightMode(
+        // Switch from launch theme to a concrete light/dark theme before first content frame.
+        setTheme(
             if (initialThemeMode == AppThemeMode.DARK) {
-                AppCompatDelegate.MODE_NIGHT_YES
+                R.style.Theme_Amctl_Dark
             } else {
-                AppCompatDelegate.MODE_NIGHT_NO
+                R.style.Theme_Amctl_Light
             },
         )
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
         setContent {
-            val appThemeMode by viewModel.serverConfig
+            val appThemeMode by settingsRepository.serverConfig
                 .map { it.appThemeMode }
                 .collectAsState(initial = initialThemeMode)
 

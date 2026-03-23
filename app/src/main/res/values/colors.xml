@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="amctl_launch_background">#121212</color>
+    <color name="amctl_light_background">#FFFFFF</color>
+    <color name="amctl_dark_background">#121212</color>
+</resources>
