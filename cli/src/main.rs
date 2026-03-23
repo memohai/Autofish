@@ -386,7 +386,15 @@ fn handle_observe_screen(
     let total_rows = screen.rows.len();
     if full {
         return Ok(
-            json!({"mode": screen.mode, "rowCount": total_rows, "rows": screen.rows, "raw": screen.raw, "full": true}),
+            json!({
+                "mode": screen.mode,
+                "rowCount": total_rows,
+                "rows": screen.rows,
+                "raw": screen.raw,
+                "full": true,
+                "hasWebView": screen.has_webview,
+                "nodeReliability": screen.node_reliability
+            }),
         );
     }
 
@@ -398,7 +406,17 @@ fn handle_observe_screen(
         .map(|r| compact_row_json(r, &selected_fields))
         .collect::<Vec<_>>();
     Ok(
-        json!({"mode": screen.mode, "rowCount": total_rows, "returnedRows": rows.len(), "truncated": total_rows > rows.len(), "rows": rows, "full": false, "fields": selected_fields}),
+        json!({
+            "mode": screen.mode,
+            "rowCount": total_rows,
+            "returnedRows": rows.len(),
+            "truncated": total_rows > rows.len(),
+            "rows": rows,
+            "full": false,
+            "fields": selected_fields,
+            "hasWebView": screen.has_webview,
+            "nodeReliability": screen.node_reliability
+        }),
     )
 }
 
@@ -498,6 +516,24 @@ fn handle_verify_node_exists(
         .nodes_find(&by_norm, value, exact_match)
         .map_err(CommandError::from)?;
     if !found.has_match {
+        let screen_meta = api.screen().ok().map(|screen| {
+            json!({
+                "mode": screen.mode,
+                "rowCount": screen.rows.len(),
+                "hasWebView": screen.has_webview,
+                "nodeReliability": screen.node_reliability
+            })
+        });
+        let hint = match screen_meta
+            .as_ref()
+            .and_then(|m| m.get("hasWebView"))
+            .and_then(|v| v.as_bool())
+        {
+            Some(true) => {
+                "WEBVIEW_LIMITATION_POSSIBLE: try verify text-contains or switch to native page"
+            }
+            _ => "TRY_OBSERVE_SCREEN_AND_ADJUST_MATCH_STRATEGY",
+        };
         return Err(CommandError::assertion_failed_with_details(
             format!("node not found: by={by}, value={value}"),
             json!({
@@ -508,7 +544,9 @@ fn handle_verify_node_exists(
                 "matched": false,
                 "matchedCount": found.matched_count,
                 "nodes": found.nodes,
-                "raw": found.raw
+                "raw": found.raw,
+                "hint": hint,
+                "screenMeta": screen_meta
             }),
         ));
     }

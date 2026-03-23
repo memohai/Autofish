@@ -77,6 +77,8 @@ pub struct ScreenResponse {
     pub raw: String,
     pub mode: Option<String>,
     pub rows: Vec<ScreenRow>,
+    pub has_webview: bool,
+    pub node_reliability: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,10 +214,14 @@ impl<'a> ApiClient<'a> {
     pub fn screen(&self) -> ApiResult<ScreenResponse> {
         let raw = self.authed_get_envelope("/api/screen", None)?;
         let parsed = parse_screen_tsv(&raw);
+        let has_webview = has_webview_nodes(&parsed.rows);
+        let node_reliability = infer_node_reliability(has_webview, parsed.rows.len()).to_string();
         Ok(ScreenResponse {
             raw,
             mode: parsed.mode,
             rows: parsed.rows,
+            has_webview,
+            node_reliability,
         })
     }
 
@@ -570,6 +576,22 @@ fn parse_screen_row(line: &str) -> Option<ScreenRow> {
     })
 }
 
+fn has_webview_nodes(rows: &[ScreenRow]) -> bool {
+    rows.iter().any(|row| {
+        row.class_name
+            .to_ascii_lowercase()
+            .contains("webview")
+    })
+}
+
+fn infer_node_reliability(has_webview: bool, row_count: usize) -> &'static str {
+    if has_webview || row_count == 0 {
+        "low"
+    } else {
+        "high"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,5 +668,47 @@ mod tests {
         assert_eq!(p.rows[0].text.as_deref(), Some("Hello"));
         assert_eq!(p.rows[1].desc.as_deref(), Some("Go"));
         assert_eq!(p.rows[1].text, None);
+    }
+
+    #[test]
+    fn webview_nodes_reduce_reliability() {
+        let rows = vec![
+            ScreenRow {
+                node_id: "1".to_string(),
+                class_name: "android.webkit.WebView".to_string(),
+                text: None,
+                desc: None,
+                res_id: None,
+                bounds: None,
+                flags: None,
+            },
+            ScreenRow {
+                node_id: "2".to_string(),
+                class_name: "android.widget.TextView".to_string(),
+                text: Some("A".to_string()),
+                desc: None,
+                res_id: None,
+                bounds: None,
+                flags: None,
+            },
+        ];
+        assert!(has_webview_nodes(&rows));
+        assert_eq!(infer_node_reliability(true, rows.len()), "low");
+    }
+
+    #[test]
+    fn non_webview_rows_keep_high_reliability() {
+        let rows = vec![ScreenRow {
+            node_id: "1".to_string(),
+            class_name: "android.widget.Button".to_string(),
+            text: None,
+            desc: None,
+            res_id: None,
+            bounds: None,
+            flags: None,
+        }];
+        assert!(!has_webview_nodes(&rows));
+        assert_eq!(infer_node_reliability(false, rows.len()), "high");
+        assert_eq!(infer_node_reliability(false, 0), "low");
     }
 }

@@ -12,10 +12,10 @@ pub enum ProxyMode {
 #[derive(Parser, Debug)]
 #[command(name = "amc", about = "Deterministic executor for amctl REST API")]
 pub struct Cli {
-    #[arg(long)]
+    #[arg(long, env = "AMC_URL")]
     pub url: String,
 
-    #[arg(long)]
+    #[arg(long, env = "AMC_TOKEN")]
     pub token: Option<String>,
 
     #[arg(long, default_value_t = 10000)]
@@ -27,7 +27,12 @@ pub struct Cli {
     #[arg(long = "no-trace", default_value_t = false)]
     pub no_trace: bool,
 
-    #[arg(long, default_value = "amc.db", value_hint = clap::ValueHint::FilePath)]
+    #[arg(
+        long,
+        env = "AMC_DB",
+        default_value = "amc.db",
+        value_hint = clap::ValueHint::FilePath
+    )]
     pub trace_db: PathBuf,
 
     #[arg(long, default_value = "default")]
@@ -39,24 +44,24 @@ pub struct Cli {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Commands {
-    #[command(name = "health")]
+    #[command(name = "health", about = "Check service health")]
     Health,
-    #[command(name = "act")]
+    #[command(name = "act", about = "Run one device action")]
     Act {
         #[command(subcommand)]
         command: ActCommands,
     },
-    #[command(name = "observe")]
+    #[command(name = "observe", about = "Observe device state")]
     Observe {
         #[command(subcommand)]
         command: ObserveCommands,
     },
-    #[command(name = "verify")]
+    #[command(name = "verify", about = "Verify expected state")]
     Verify {
         #[command(subcommand)]
         command: VerifyCommands,
     },
-    #[command(name = "recover")]
+    #[command(name = "recover", about = "Run simple recovery actions")]
     Recover {
         #[command(subcommand)]
         command: RecoverCommands,
@@ -113,7 +118,11 @@ pub enum ActCommands {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum ObserveCommands {
-    #[command(name = "screen")]
+    #[command(
+        name = "screen",
+        about = "Observe current UI tree snapshot",
+        long_about = "Observe current UI tree snapshot.\n\nOutput includes `hasWebView` and `nodeReliability`.\nWhen `hasWebView=true` or `nodeReliability=low`, node-based verification may be less reliable."
+    )]
     Screen {
         #[arg(long, default_value_t = false)]
         full: bool,
@@ -149,7 +158,11 @@ pub enum VerifyCommands {
         #[arg(long, default_value = "contains")]
         mode: String,
     },
-    #[command(name = "node-exists")]
+    #[command(
+        name = "node-exists",
+        about = "Verify a node exists by id/text/desc/class/resource_id",
+        long_about = "Verify a node exists by id/text/desc/class/resource_id.\n\nIf the screen is WebView-heavy (`hasWebView=true` or `nodeReliability=low`), prefer `verify text-contains` first."
+    )]
     NodeExists {
         #[arg(long)]
         by: String,
