@@ -94,8 +94,6 @@ pub struct ScreenRefsResponse {
     pub has_webview: bool,
     #[serde(rename = "nodeReliability")]
     pub node_reliability: String,
-    #[serde(default)]
-    pub unchanged: bool,
     pub rows: Vec<RefRow>,
 }
 
@@ -202,11 +200,10 @@ impl<'a> ApiClient<'a> {
         by: &str,
         value: &str,
         exact_match: bool,
-        expected_ref_version: Option<u64>,
     ) -> ApiResult<ActionResponse> {
         let message = self.authed_post_envelope(
             "/api/nodes/tap",
-            Some(json!({"by": by, "value": value, "exact_match": exact_match, "expected_ref_version": expected_ref_version})),
+            Some(json!({"by": by, "value": value, "exact_match": exact_match})),
         )?;
         Ok(ActionResponse { message })
     }
@@ -275,13 +272,8 @@ impl<'a> ApiClient<'a> {
         })
     }
 
-    pub fn screen_refs(&self, known_ref_version: Option<u64>) -> ApiResult<ScreenRefsResponse> {
-        let mut query = Vec::<(&str, String)>::new();
-        if let Some(v) = known_ref_version {
-            query.push(("known_ref_version", v.to_string()));
-        }
-        let query_ref = if query.is_empty() { None } else { Some(query.as_slice()) };
-        let raw = self.authed_get_envelope("/api/screen/refs", query_ref)?;
+    pub fn screen_refs(&self) -> ApiResult<ScreenRefsResponse> {
+        let raw = self.authed_get_envelope("/api/screen/refs", None)?;
         serde_json::from_str::<ScreenRefsResponse>(&raw).map_err(|e| {
             ApiError::new(
                 ApiErrorKind::BadResponse,
