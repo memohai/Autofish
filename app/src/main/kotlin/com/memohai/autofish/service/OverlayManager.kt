@@ -1,4 +1,4 @@
-package com.memohai.autofish.rest
+package com.memohai.autofish.service
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Canvas

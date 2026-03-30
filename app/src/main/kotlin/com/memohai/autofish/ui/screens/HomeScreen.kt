@@ -95,7 +95,7 @@ import com.memohai.autofish.data.model.AppThemeMode
 import com.memohai.autofish.data.model.ServerStatus
 import com.memohai.autofish.services.logging.ServiceLogBus
 import com.memohai.autofish.services.logging.ServiceLogEntry
-import com.memohai.autofish.ui.components.RestConfigurationSection
+import com.memohai.autofish.ui.components.ServiceConfigurationSection
 import com.memohai.autofish.ui.components.ServerStatusCard
 import com.memohai.autofish.ui.viewmodels.MainViewModel
 import kotlinx.coroutines.launch
@@ -107,7 +107,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
     val serverConfig by viewModel.serverConfig.collectAsState()
-    val restServerStatus by viewModel.restServerStatus.collectAsState()
+    val serviceServerStatus by viewModel.serviceServerStatus.collectAsState()
     val deviceIp by viewModel.deviceIp.collectAsState()
     val shizukuStatus by viewModel.shizukuStatus.collectAsState()
     val controlMode by viewModel.controlMode.collectAsState()
@@ -115,7 +115,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
     val refPanelState by viewModel.refPanelState.collectAsState()
     val context = LocalContext.current
-    val isRestRunning = restServerStatus is ServerStatus.Running
+    val isServiceRunning = serviceServerStatus is ServerStatus.Running
     var selectedTab by rememberSaveable { mutableStateOf(UiTab.Home) }
     var selectedSettingPage by rememberSaveable { mutableStateOf(SettingPage.Menu) }
     var showLanguageRestartDialog by rememberSaveable { mutableStateOf(false) }
@@ -169,8 +169,8 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
             }
         }
     }
-    LaunchedEffect(isRestRunning) {
-        if (isRestRunning) {
+    LaunchedEffect(isServiceRunning) {
+        if (isServiceRunning) {
             viewModel.refreshDeviceIp()
         }
     }
@@ -327,13 +327,13 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     ServerStatusCard(
-                        title = stringResource(R.string.rest_api_server),
-                        serverStatus = restServerStatus,
+                        title = stringResource(R.string.service_api_server),
+                        serverStatus = serviceServerStatus,
                         onToggle = { enabled ->
-                            if (enabled) viewModel.startRestServer() else viewModel.stopRestServer()
+                            if (enabled) viewModel.startServiceServer() else viewModel.stopServiceServer()
                         },
                     )
-                    if (isRestRunning) {
+                    if (isServiceRunning) {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier.padding(16.dp),
@@ -354,7 +354,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                     text = stringResource(
                                         R.string.service_addr_format,
                                         deviceIp ?: stringResource(R.string.unknown),
-                                        serverConfig.restPort,
+                                        serverConfig.servicePort,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -426,7 +426,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                     searchQuery = logSearchQuery,
                     onSearchQueryChange = { logSearchQuery = it },
                     levelFilter = logLevelFilter,
-                    hasRunningService = isRestRunning,
+                    hasRunningService = isServiceRunning,
                 )
             }
 
@@ -563,11 +563,11 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             )
-                            RestConfigurationSection(
+                            ServiceConfigurationSection(
                                 config = serverConfig,
-                                isServerRunning = isRestRunning,
-                                onPortChange = viewModel::updateRestPort,
-                                onRegenerateToken = viewModel::generateNewRestBearerToken,
+                                isServerRunning = isServiceRunning,
+                                onPortChange = viewModel::updateServicePort,
+                                onRegenerateToken = viewModel::generateNewServiceBearerToken,
                             )
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -595,8 +595,8 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                         )
                                     }
                                     Switch(
-                                        checked = serverConfig.restOverlayVisible,
-                                        onCheckedChange = viewModel::updateRestOverlayVisible,
+                                        checked = serverConfig.serviceOverlayVisible,
+                                        onCheckedChange = viewModel::updateServiceOverlayVisible,
                                     )
                                 }
                             }
@@ -625,9 +625,9 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                             )
                                         }
                                         Switch(
-                                            checked = serverConfig.restRefVisible,
-                                            onCheckedChange = viewModel::updateRestRefVisible,
-                                            enabled = isRestRunning,
+                                            checked = serverConfig.serviceRefVisible,
+                                            onCheckedChange = viewModel::updateServiceRefVisible,
+                                            enabled = isServiceRunning,
                                         )
                                     }
                                     Row(
@@ -642,7 +642,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                                         Switch(
                                             checked = refPanelState?.autoRefresh ?: true,
                                             onCheckedChange = viewModel::updateRefAutoRefresh,
-                                            enabled = isRestRunning,
+                                            enabled = isServiceRunning,
                                         )
                                     }
                                     Text(
@@ -670,7 +670,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel()) {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
-                                    Text("${stringResource(R.string.app_name_label)}: Auto Fish", style = MaterialTheme.typography.bodyMedium)
+                                    Text("${stringResource(R.string.app_name_label)}: Autofish", style = MaterialTheme.typography.bodyMedium)
                                     Text("${stringResource(R.string.version_label)}: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyMedium)
                                     Text(
                                         "${stringResource(R.string.build_type_label)}: ${if (BuildConfig.DEBUG) "Debug" else "Release"}",

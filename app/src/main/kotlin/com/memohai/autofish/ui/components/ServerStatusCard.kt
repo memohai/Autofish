@@ -30,7 +30,7 @@ fun ServerStatusCard(
     serverStatus: ServerStatus,
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "MCP Server",
+    title: String = "Control Server",
 ) {
     val isRunning = serverStatus is ServerStatus.Running
     val isTransitioning = serverStatus is ServerStatus.Starting || serverStatus is ServerStatus.Stopping

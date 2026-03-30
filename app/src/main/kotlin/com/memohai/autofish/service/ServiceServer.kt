@@ -1,6 +1,6 @@
-package com.memohai.autofish.rest
+package com.memohai.autofish.service
 
-import com.memohai.autofish.mcp.auth.BearerTokenAuth
+import com.memohai.autofish.service.auth.BearerTokenAuth
 import com.memohai.autofish.services.accessibility.AccessibilityServiceProvider
 import com.memohai.autofish.services.accessibility.AccessibilityTreeParser
 import com.memohai.autofish.services.accessibility.CompactTreeFormatter
@@ -36,7 +36,7 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-class RestServer(
+class ServiceServer(
     private val port: Int,
     private val bindAddress: String,
     private val bearerToken: String,
@@ -66,7 +66,7 @@ class RestServer(
 
             routing {
                 get("/health") {
-                    call.respondText("""{"status":"healthy","type":"rest"}""", ContentType.Application.Json)
+                    call.respondText("""{"status":"healthy","type":"service"}""", ContentType.Application.Json)
                 }
 
                 route("/api") {
@@ -167,8 +167,8 @@ class RestServer(
         }
 
         get("/screen/refs") {
-            val snapshot = collectScreenSnapshot()
-            val state = refreshRefState(snapshot)
+            val refsResult = resolveRefsState()
+            val state = refsResult.state
             val rows = state.refs.take(refConfig.maxRefs.coerceAtLeast(1)).map {
                 RefRowPayload(
                     ref = it.ref,
@@ -187,7 +187,7 @@ class RestServer(
                 refVersion = state.version,
                 refCount = state.refs.size,
                 updatedAtMs = state.updatedAtMs,
-                mode = snapshot.mode,
+                mode = refsResult.mode,
                 hasWebView = hasWebView,
                 nodeReliability = nodeReliability,
                 rows = rows,
@@ -429,8 +429,7 @@ class RestServer(
                         )
                         return@post
                     }
-                val snapshot = collectScreenSnapshot()
-                val state = refreshRefState(snapshot)
+                val state = resolveRefsState().state
                 if (state.version != expected) {
                     call.respondText(
                         err("VERSION_MISMATCH: expected_ref_version=$expected current_ref_version=${state.version}"),
@@ -866,7 +865,7 @@ class RestServer(
 
     @Synchronized
     fun getRefPanelState(limit: Int = 120): RefPanelStatePayload {
-        val state = refreshRefState(collectScreenSnapshot())
+        val state = resolveRefsState().state
         return RefPanelStatePayload(
             version = state.version,
             count = state.refs.size,
@@ -1010,8 +1009,8 @@ class RestServer(
         scheduler.scheduleAtFixedRate(
             {
                 try {
-                    if (!refConfig.autoRefresh) return@scheduleAtFixedRate
-                    refreshRefState(collectScreenSnapshot())
+                    if (!refConfig.autoRefresh || !refConfig.visible) return@scheduleAtFixedRate
+                    resolveRefsState()
                 } catch (_: Exception) {
                 }
             },
@@ -1085,6 +1084,21 @@ class RestServer(
         val focused: Boolean,
         val windowLayer: Int,
     )
+
+    private data class RefsResolveResult(
+        val state: RefState,
+        val mode: ToolRouter.Mode,
+    )
+
+    @Synchronized
+    private fun resolveRefsState(): RefsResolveResult {
+        val snapshot = collectScreenSnapshot()
+        val state = refreshRefState(snapshot)
+        return RefsResolveResult(
+            state = state,
+            mode = snapshot.mode,
+        )
+    }
 
     @Serializable data class LaunchRequest(val package_name: String)
     @Serializable data class StopRequest(val package_name: String)

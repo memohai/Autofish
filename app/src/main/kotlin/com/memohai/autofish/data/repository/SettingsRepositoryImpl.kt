@@ -26,61 +26,42 @@ class SettingsRepositoryImpl
 
         override suspend fun getServerConfig(): ServerConfig {
             var config = dataStore.data.first().let { mapPreferencesToServerConfig(it) }
-            if (config.bearerToken.isEmpty()) {
+            if (config.serviceBearerToken.isEmpty()) {
                 val token = UUID.randomUUID().toString()
-                updateBearerToken(token)
-                config = config.copy(bearerToken = token)
-            }
-            if (config.restBearerToken.isEmpty()) {
-                val token = UUID.randomUUID().toString()
-                updateRestBearerToken(token)
-                config = config.copy(restBearerToken = token)
+                updateServiceBearerToken(token)
+                config = config.copy(serviceBearerToken = token)
             }
             return config
-        }
-
-        override suspend fun updatePort(port: Int) {
-            dataStore.edit { it[PORT_KEY] = port }
         }
 
         override suspend fun updateBindingAddress(bindingAddress: BindingAddress) {
             dataStore.edit { it[BINDING_ADDRESS_KEY] = bindingAddress.name }
         }
 
-        override suspend fun updateBearerToken(token: String) {
-            dataStore.edit { it[BEARER_TOKEN_KEY] = token }
-        }
-
-        override suspend fun generateNewBearerToken(): String {
-            val token = UUID.randomUUID().toString()
-            updateBearerToken(token)
-            return token
-        }
-
         override suspend fun updateAutoStartOnBoot(enabled: Boolean) {
             dataStore.edit { it[AUTO_START_KEY] = enabled }
         }
 
-        override suspend fun updateRestPort(port: Int) {
-            dataStore.edit { it[REST_PORT_KEY] = port }
+        override suspend fun updateServicePort(port: Int) {
+            dataStore.edit { it[SERVICE_PORT_KEY] = port }
         }
 
-        override suspend fun updateRestBearerToken(token: String) {
-            dataStore.edit { it[REST_BEARER_TOKEN_KEY] = token }
+        override suspend fun updateServiceBearerToken(token: String) {
+            dataStore.edit { it[SERVICE_BEARER_TOKEN_KEY] = token }
         }
 
-        override suspend fun generateNewRestBearerToken(): String {
+        override suspend fun generateNewServiceBearerToken(): String {
             val token = UUID.randomUUID().toString()
-            updateRestBearerToken(token)
+            updateServiceBearerToken(token)
             return token
         }
 
-        override suspend fun updateRestOverlayVisible(visible: Boolean) {
-            dataStore.edit { it[REST_OVERLAY_VISIBLE_KEY] = visible }
+        override suspend fun updateServiceOverlayVisible(visible: Boolean) {
+            dataStore.edit { it[SERVICE_OVERLAY_VISIBLE_KEY] = visible }
         }
 
-        override suspend fun updateRestRefVisible(visible: Boolean) {
-            dataStore.edit { it[REST_REF_VISIBLE_KEY] = visible }
+        override suspend fun updateServiceRefVisible(visible: Boolean) {
+            dataStore.edit { it[SERVICE_REF_VISIBLE_KEY] = visible }
         }
 
         override suspend fun updateAppLanguage(language: AppLanguage) {
@@ -107,31 +88,27 @@ class SettingsRepositoryImpl
             val appLanguageName = prefs[APP_LANGUAGE_KEY] ?: AppLanguage.SYSTEM.name
             val appThemeModeName = prefs[APP_THEME_MODE_KEY] ?: AppThemeMode.LIGHT.name
             return ServerConfig(
-                port = prefs[PORT_KEY] ?: ServerConfig.DEFAULT_MCP_PORT,
                 bindingAddress =
                     BindingAddress.entries.firstOrNull { it.name == bindingAddressName }
                         ?.takeUnless { it == BindingAddress.LOCALHOST }
                         ?: BindingAddress.ALL_INTERFACES,
-                bearerToken = prefs[BEARER_TOKEN_KEY] ?: "",
                 autoStartOnBoot = prefs[AUTO_START_KEY] ?: false,
-                restPort = prefs[REST_PORT_KEY] ?: ServerConfig.DEFAULT_REST_PORT,
-                restBearerToken = prefs[REST_BEARER_TOKEN_KEY] ?: "",
-                restOverlayVisible = prefs[REST_OVERLAY_VISIBLE_KEY] ?: false,
-                restRefVisible = prefs[REST_REF_VISIBLE_KEY] ?: false,
+                servicePort = prefs[SERVICE_PORT_KEY] ?: ServerConfig.DEFAULT_PORT,
+                serviceBearerToken = prefs[SERVICE_BEARER_TOKEN_KEY] ?: "",
+                serviceOverlayVisible = prefs[SERVICE_OVERLAY_VISIBLE_KEY] ?: false,
+                serviceRefVisible = prefs[SERVICE_REF_VISIBLE_KEY] ?: false,
                 appLanguage = AppLanguage.entries.firstOrNull { it.name == appLanguageName } ?: AppLanguage.SYSTEM,
                 appThemeMode = AppThemeMode.entries.firstOrNull { it.name == appThemeModeName } ?: AppThemeMode.LIGHT,
             )
         }
 
         companion object {
-            private val PORT_KEY = intPreferencesKey("port")
             private val BINDING_ADDRESS_KEY = stringPreferencesKey("binding_address")
-            private val BEARER_TOKEN_KEY = stringPreferencesKey("bearer_token")
             private val AUTO_START_KEY = booleanPreferencesKey("auto_start_on_boot")
-            private val REST_PORT_KEY = intPreferencesKey("rest_port")
-            private val REST_BEARER_TOKEN_KEY = stringPreferencesKey("rest_bearer_token")
-            private val REST_OVERLAY_VISIBLE_KEY = booleanPreferencesKey("rest_overlay_visible")
-            private val REST_REF_VISIBLE_KEY = booleanPreferencesKey("rest_ref_visible")
+            private val SERVICE_PORT_KEY = intPreferencesKey("service_port")
+            private val SERVICE_BEARER_TOKEN_KEY = stringPreferencesKey("service_bearer_token")
+            private val SERVICE_OVERLAY_VISIBLE_KEY = booleanPreferencesKey("service_overlay_visible")
+            private val SERVICE_REF_VISIBLE_KEY = booleanPreferencesKey("service_ref_visible")
             private val APP_LANGUAGE_KEY = stringPreferencesKey("app_language")
             private val APP_THEME_MODE_KEY = stringPreferencesKey("app_theme_mode")
         }

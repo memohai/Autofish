@@ -12,21 +12,17 @@ enum class AppThemeMode {
 }
 
 data class ServerConfig(
-    val port: Int = DEFAULT_MCP_PORT,
     val bindingAddress: BindingAddress = BindingAddress.ALL_INTERFACES,
-    val bearerToken: String = "",
     val autoStartOnBoot: Boolean = false,
-    val restPort: Int = DEFAULT_REST_PORT,
-    val restBearerToken: String = "",
-    val restOverlayVisible: Boolean = false,
-    val restRefVisible: Boolean = false,
+    val servicePort: Int = DEFAULT_PORT,
+    val serviceBearerToken: String = "",
+    val serviceOverlayVisible: Boolean = false,
+    val serviceRefVisible: Boolean = false,
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val appThemeMode: AppThemeMode = AppThemeMode.LIGHT,
 ) {
     companion object {
-        const val DEFAULT_MCP_PORT = 8080
-        const val DEFAULT_REST_PORT = 8081
-        const val DEFAULT_PORT = DEFAULT_MCP_PORT
+        const val DEFAULT_PORT = 8081
         const val MIN_PORT = 1
         const val MAX_PORT = 65535
     }

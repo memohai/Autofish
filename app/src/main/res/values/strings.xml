@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Auto Fish</string>
-    <string name="accessibility_service_description">Auto Fish accessibility service for remote device control via MCP protocol.</string>
+    <string name="app_name">Autofish</string>
+    <string name="accessibility_service_description">Autofish accessibility service for remote device control via remote control protocol.</string>
     <string name="tab_home">Home</string>
     <string name="tab_log">Log</string>
     <string name="tab_setting">Setting</string>
@@ -24,8 +24,7 @@
     <string name="version_label">Version</string>
     <string name="build_type_label">Build Type</string>
     <string name="install_date_label">Install Date</string>
-    <string name="mcp_server">MCP Server</string>
-    <string name="rest_api_server">Service</string>
+    <string name="service_api_server">Service</string>
     <string name="overlay_visible">Overlay Visible</string>
     <string name="overlay_visible_desc">Show or hide server-side UI overlay marks on screen.</string>
     <string name="ref_state">On-screen Number Labels</string>
@@ -40,8 +39,7 @@
     <string name="unknown">Unknown</string>
     <string name="device_ip_format">Device IP: %1$s</string>
     <string name="service_addr_format">Service: http://%1$s:%2$d</string>
-    <string name="mcp_info_format">MCP: port %1$d, token %2$s...</string>
-    <string name="rest_info_format">REST: port %1$d, token %2$s...</string>
+    <string name="service_info_format">Service: port %1$d, token %2$s...</string>
     <string name="server_stopped">Stopped</string>
     <string name="server_starting">Starting…</string>
     <string name="server_running_format">Running on %1$s:%2$d</string>
@@ -66,7 +64,7 @@
     <string name="log_level_error">Error</string>
     <string name="service_not_started">Service not started</string>
     <string name="service_settings">Service Settings</string>
-    <string name="service_channel_name">Auto Fish Service</string>
+    <string name="service_channel_name">Autofish Service</string>
     <string name="service_channel_desc">Service foreground process</string>
     <string name="service_running_notification">Service is running</string>
     <string name="port_label">Port</string>

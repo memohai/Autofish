@@ -29,12 +29,7 @@
         </activity>
 
         <service
-            android:name=".services.mcp.McpServerService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse" />
-
-        <service
-            android:name=".services.rest.RestServerService"
+            android:name=".services.service.ServiceServerService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Auto Fish</string>
-    <string name="accessibility_service_description">Auto Fish 无障碍服务，用于通过 MCP 协议远程控制设备。</string>
+    <string name="app_name">Autofish</string>
+    <string name="accessibility_service_description">Autofish 无障碍服务，用于通过 Control 协议远程控制设备。</string>
     <string name="tab_home">首页</string>
     <string name="tab_log">日志</string>
     <string name="tab_setting">设置</string>
@@ -24,8 +24,7 @@
     <string name="version_label">版本</string>
     <string name="build_type_label">构建类型</string>
     <string name="install_date_label">安装日期</string>
-    <string name="mcp_server">MCP 服务</string>
-    <string name="rest_api_server">服务</string>
+    <string name="service_api_server">服务</string>
     <string name="overlay_visible">Overlay 可见</string>
     <string name="overlay_visible_desc">显示或隐藏服务端在屏幕上的 UI 标注层。</string>
     <string name="ref_state">屏幕编号标注</string>
@@ -40,8 +39,7 @@
     <string name="unknown">未知</string>
     <string name="device_ip_format">设备 IP：%1$s</string>
     <string name="service_addr_format">服务地址：http://%1$s:%2$d</string>
-    <string name="mcp_info_format">MCP：端口 %1$d，令牌 %2$s...</string>
-    <string name="rest_info_format">REST：端口 %1$d，令牌 %2$s...</string>
+    <string name="service_info_format">Service：端口 %1$d，令牌 %2$s...</string>
     <string name="server_stopped">已停止</string>
     <string name="server_starting">启动中…</string>
     <string name="server_running_format">运行中：%1$s:%2$d</string>
@@ -66,7 +64,7 @@
     <string name="log_level_error">错误</string>
     <string name="service_not_started">服务未启动</string>
     <string name="service_settings">服务设置</string>
-    <string name="service_channel_name">Auto Fish 服务</string>
+    <string name="service_channel_name">Autofish 服务</string>
     <string name="service_channel_desc">服务前台进程</string>
     <string name="service_running_notification">服务运行中</string>
     <string name="port_label">端口</string>

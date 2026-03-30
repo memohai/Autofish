@@ -1,4 +1,4 @@
-package com.memohai.autofish.services.rest
+package com.memohai.autofish.services.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,7 +9,7 @@ import android.os.IBinder
 import android.util.Log
 import com.memohai.autofish.data.model.ServerStatus
 import com.memohai.autofish.data.repository.SettingsRepository
-import com.memohai.autofish.rest.RestServer
+import com.memohai.autofish.service.ServiceServer
 import com.memohai.autofish.services.accessibility.AccessibilityServiceProvider
 import com.memohai.autofish.services.accessibility.AccessibilityTreeParser
 import com.memohai.autofish.services.accessibility.CompactTreeFormatter
@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class RestServerService : Service() {
+class ServiceServerService : Service() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var accessibilityServiceProvider: AccessibilityServiceProvider
@@ -37,18 +37,18 @@ class RestServerService : Service() {
     @Inject lateinit var toolRouter: ToolRouter
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var restServer: RestServer? = null
+    private var serviceServer: ServiceServer? = null
 
     companion object {
-        private const val TAG = "autofish:RestService"
-        private const val CHANNEL_ID = "autofish_rest_server"
+        private const val TAG = "autofish:Service"
+        private const val CHANNEL_ID = "autofish_service_server"
         private const val NOTIFICATION_ID = 2
-        const val ACTION_START = "com.memohai.autofish.ACTION_START_REST_SERVER"
-        const val ACTION_STOP = "com.memohai.autofish.ACTION_STOP_REST_SERVER"
+        const val ACTION_START = "com.memohai.autofish.ACTION_START_SERVICE_SERVER"
+        const val ACTION_STOP = "com.memohai.autofish.ACTION_STOP_SERVICE_SERVER"
 
         private val _serverStatus = MutableStateFlow<ServerStatus>(ServerStatus.Stopped)
         val serverStatus: StateFlow<ServerStatus> = _serverStatus
-        @Volatile private var runningInstance: RestServerService? = null
+        @Volatile private var runningInstance: ServiceServerService? = null
 
         fun setOverlayVisible(visible: Boolean) {
             runningInstance?.setOverlayVisibleInternal(visible)
@@ -62,7 +62,7 @@ class RestServerService : Service() {
             runningInstance?.setRefVisibleInternal(visible)
         }
 
-        fun getRefPanelState(limit: Int = 120): RestServer.RefPanelStatePayload? =
+        fun getRefPanelState(limit: Int = 120): ServiceServer.RefPanelStatePayload? =
             runningInstance?.getRefPanelStateInternal(limit)
     }
 
@@ -80,17 +80,17 @@ class RestServerService : Service() {
     @Suppress("TooGenericExceptionCaught")
     private fun startServer() {
         _serverStatus.value = ServerStatus.Starting
-        ServiceLogBus.info("REST", "Start requested")
+        ServiceLogBus.info("SERVICE", "Start requested")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
         serviceScope.launch {
             try {
                 val config = settingsRepository.getServerConfig()
-                val server = RestServer(
-                    port = config.restPort,
+                val server = ServiceServer(
+                    port = config.servicePort,
                     bindAddress = config.bindingAddress.address,
-                    bearerToken = config.restBearerToken,
+                    bearerToken = config.serviceBearerToken,
                     toolRouter = toolRouter,
                     accessibilityProvider = accessibilityServiceProvider,
                     treeParser = treeParser,
@@ -98,16 +98,16 @@ class RestServerService : Service() {
                     elementFinder = elementFinder,
                 )
                 server.start()
-                restServer = server
-                server.setOverlayVisible(config.restOverlayVisible)
-                server.setRefVisible(config.restRefVisible)
-                _serverStatus.value = ServerStatus.Running(config.restPort, config.bindingAddress.address)
-                Log.i(TAG, "REST server started on ${config.bindingAddress.address}:${config.restPort}")
-                ServiceLogBus.info("REST", "Started on ${config.bindingAddress.address}:${config.restPort}")
+                serviceServer = server
+                server.setOverlayVisible(config.serviceOverlayVisible)
+                server.setRefVisible(config.serviceRefVisible)
+                _serverStatus.value = ServerStatus.Running(config.servicePort, config.bindingAddress.address)
+                Log.i(TAG, "Service server started on ${config.bindingAddress.address}:${config.servicePort}")
+                ServiceLogBus.info("SERVICE", "Started on ${config.bindingAddress.address}:${config.servicePort}")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start REST server", e)
+                Log.e(TAG, "Failed to start Service server", e)
                 _serverStatus.value = ServerStatus.Error(e.message ?: "Unknown error")
-                ServiceLogBus.error("REST", "Start failed: ${e.message ?: "Unknown error"}")
+                ServiceLogBus.error("SERVICE", "Start failed: ${e.message ?: "Unknown error"}")
                 stopSelf()
             }
         }
@@ -115,24 +115,24 @@ class RestServerService : Service() {
 
     private fun stopServer() {
         _serverStatus.value = ServerStatus.Stopping
-        ServiceLogBus.info("REST", "Stop requested")
+        ServiceLogBus.info("SERVICE", "Stop requested")
         serviceScope.launch {
-            runCatching { restServer?.stop() }
+            runCatching { serviceServer?.stop() }
                 .onFailure { e ->
-                    Log.e(TAG, "Failed to stop REST server", e)
-                    ServiceLogBus.error("REST", "Stop failed: ${e.message ?: "Unknown error"}")
+                    Log.e(TAG, "Failed to stop Service server", e)
+                    ServiceLogBus.error("SERVICE", "Stop failed: ${e.message ?: "Unknown error"}")
                 }
-            restServer = null
+            serviceServer = null
             _serverStatus.value = ServerStatus.Stopped
-            ServiceLogBus.info("REST", "Stopped")
+            ServiceLogBus.info("SERVICE", "Stopped")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
     override fun onDestroy() {
-        restServer?.stop()
-        restServer = null
+        serviceServer?.stop()
+        serviceServer = null
         runningInstance = null
         _serverStatus.value = ServerStatus.Stopped
         serviceScope.cancel()
@@ -141,7 +141,7 @@ class RestServerService : Service() {
 
     private fun setOverlayVisibleInternal(visible: Boolean) {
         serviceScope.launch {
-            runCatching { restServer?.setOverlayVisible(visible) }
+            runCatching { serviceServer?.setOverlayVisible(visible) }
                 .onFailure { e ->
                     Log.w(TAG, "Failed to update overlay visible=$visible", e)
                 }
@@ -150,7 +150,7 @@ class RestServerService : Service() {
 
     private fun setRefAutoRefreshInternal(enabled: Boolean) {
         serviceScope.launch {
-            runCatching { restServer?.setRefAutoRefresh(enabled) }
+            runCatching { serviceServer?.setRefAutoRefresh(enabled) }
                 .onFailure { e ->
                     Log.w(TAG, "Failed to update ref auto refresh=$enabled", e)
                 }
@@ -159,15 +159,15 @@ class RestServerService : Service() {
 
     private fun setRefVisibleInternal(visible: Boolean) {
         serviceScope.launch {
-            runCatching { restServer?.setRefVisible(visible) }
+            runCatching { serviceServer?.setRefVisible(visible) }
                 .onFailure { e ->
                     Log.w(TAG, "Failed to update ref visible=$visible", e)
                 }
         }
     }
 
-    private fun getRefPanelStateInternal(limit: Int): RestServer.RefPanelStatePayload? =
-        runCatching { restServer?.getRefPanelState(limit) }
+    private fun getRefPanelStateInternal(limit: Int): ServiceServer.RefPanelStatePayload? =
+        runCatching { serviceServer?.getRefPanelState(limit) }
             .onFailure { e -> Log.w(TAG, "Failed to read ref panel state", e) }
             .getOrNull()
 
@@ -184,7 +184,7 @@ class RestServerService : Service() {
 
     private fun buildNotification(): Notification =
         Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Auto Fish")
+            .setContentTitle("Autofish")
             .setContentText(getString(com.memohai.autofish.R.string.service_running_notification))
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .setOngoing(true)

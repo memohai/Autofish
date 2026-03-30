@@ -12,9 +12,8 @@ import com.memohai.autofish.data.model.ServerConfig
 import com.memohai.autofish.data.model.ServerStatus
 import com.memohai.autofish.data.repository.SettingsRepository
 import com.memohai.autofish.services.accessibility.AutoFishAccessibilityService
-import com.memohai.autofish.services.mcp.McpServerService
-import com.memohai.autofish.rest.RestServer
-import com.memohai.autofish.services.rest.RestServerService
+import com.memohai.autofish.service.ServiceServer
+import com.memohai.autofish.services.service.ServiceServerService
 import com.memohai.autofish.services.system.ShizukuProvider
 import com.memohai.autofish.services.system.ToolRouter
 import com.memohai.autofish.utils.NetworkUtils
@@ -42,9 +41,7 @@ class MainViewModel
         val serverConfig: StateFlow<ServerConfig> = settingsRepository.serverConfig
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ServerConfig())
 
-        val serverStatus: StateFlow<ServerStatus> = McpServerService.serverStatus
-
-        val restServerStatus: StateFlow<ServerStatus> = RestServerService.serverStatus
+        val serviceServerStatus: StateFlow<ServerStatus> = ServiceServerService.serverStatus
 
         private val _deviceIp = MutableStateFlow(NetworkUtils.getDeviceIpAddress())
         val deviceIp: StateFlow<String?> = _deviceIp.asStateFlow()
@@ -58,8 +55,8 @@ class MainViewModel
         val accessibilityEnabled: StateFlow<Boolean> = _accessibilityEnabled.asStateFlow()
         private val _notificationsEnabled = MutableStateFlow(NotificationManagerCompat.from(application).areNotificationsEnabled())
         val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
-        private val _refPanelState = MutableStateFlow<RestServer.RefPanelStatePayload?>(null)
-        val refPanelState: StateFlow<RestServer.RefPanelStatePayload?> = _refPanelState.asStateFlow()
+        private val _refPanelState = MutableStateFlow<ServiceServer.RefPanelStatePayload?>(null)
+        val refPanelState: StateFlow<ServiceServer.RefPanelStatePayload?> = _refPanelState.asStateFlow()
 
         companion object {
             private const val SHIZUKU_PERMISSION_REQUEST_CODE = 1001
@@ -83,78 +80,54 @@ class MainViewModel
             }
         }
 
-        fun startServer() {
-            val intent = Intent(application, McpServerService::class.java).apply {
-                action = McpServerService.ACTION_START
+        fun startServiceServer() {
+            val intent = Intent(application, ServiceServerService::class.java).apply {
+                action = ServiceServerService.ACTION_START
             }
             application.startForegroundService(intent)
         }
 
-        fun stopServer() {
-            val intent = Intent(application, McpServerService::class.java).apply {
-                action = McpServerService.ACTION_STOP
+        fun stopServiceServer() {
+            val intent = Intent(application, ServiceServerService::class.java).apply {
+                action = ServiceServerService.ACTION_STOP
             }
             application.startService(intent)
-        }
-
-        fun startRestServer() {
-            val intent = Intent(application, RestServerService::class.java).apply {
-                action = RestServerService.ACTION_START
-            }
-            application.startForegroundService(intent)
-        }
-
-        fun stopRestServer() {
-            val intent = Intent(application, RestServerService::class.java).apply {
-                action = RestServerService.ACTION_STOP
-            }
-            application.startService(intent)
-        }
-
-        fun updatePort(port: Int) {
-            settingsRepository.validatePort(port).onSuccess {
-                viewModelScope.launch { settingsRepository.updatePort(it) }
-            }
         }
 
         fun updateBindingAddress(address: BindingAddress) {
             viewModelScope.launch { settingsRepository.updateBindingAddress(address) }
         }
 
-        fun generateNewBearerToken() {
-            viewModelScope.launch { settingsRepository.generateNewBearerToken() }
-        }
-
-        fun updateRestPort(port: Int) {
+        fun updateServicePort(port: Int) {
             settingsRepository.validatePort(port).onSuccess {
-                viewModelScope.launch { settingsRepository.updateRestPort(it) }
+                viewModelScope.launch { settingsRepository.updateServicePort(it) }
             }
         }
 
-        fun generateNewRestBearerToken() {
-            viewModelScope.launch { settingsRepository.generateNewRestBearerToken() }
+        fun generateNewServiceBearerToken() {
+            viewModelScope.launch { settingsRepository.generateNewServiceBearerToken() }
         }
 
-        fun updateRestOverlayVisible(visible: Boolean) {
+        fun updateServiceOverlayVisible(visible: Boolean) {
             viewModelScope.launch {
-                settingsRepository.updateRestOverlayVisible(visible)
-                RestServerService.setOverlayVisible(visible)
+                settingsRepository.updateServiceOverlayVisible(visible)
+                ServiceServerService.setOverlayVisible(visible)
             }
         }
 
-        fun updateRestRefVisible(visible: Boolean) {
+        fun updateServiceRefVisible(visible: Boolean) {
             viewModelScope.launch {
-                settingsRepository.updateRestRefVisible(visible)
+                settingsRepository.updateServiceRefVisible(visible)
                 if (visible) {
-                    settingsRepository.updateRestOverlayVisible(true)
-                    RestServerService.setOverlayVisible(true)
+                    settingsRepository.updateServiceOverlayVisible(true)
+                    ServiceServerService.setOverlayVisible(true)
                 }
-                RestServerService.setRefVisible(visible)
+                ServiceServerService.setRefVisible(visible)
             }
         }
 
         fun updateRefAutoRefresh(enabled: Boolean) {
-            RestServerService.setRefAutoRefresh(enabled)
+            ServiceServerService.setRefAutoRefresh(enabled)
         }
 
         fun updateAppLanguage(language: AppLanguage) {
@@ -183,7 +156,7 @@ class MainViewModel
             _controlMode.value = toolRouter.currentMode.name
             _accessibilityEnabled.value = isAccessibilityEnabledNow()
             _notificationsEnabled.value = NotificationManagerCompat.from(application).areNotificationsEnabled()
-            _refPanelState.value = RestServerService.getRefPanelState()
+            _refPanelState.value = ServiceServerService.getRefPanelState()
         }
 
         private fun isAccessibilityEnabledNow(): Boolean =

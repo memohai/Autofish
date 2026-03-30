@@ -10,16 +10,13 @@ interface SettingsRepository {
     val serverConfig: Flow<ServerConfig>
 
     suspend fun getServerConfig(): ServerConfig
-    suspend fun updatePort(port: Int)
     suspend fun updateBindingAddress(bindingAddress: BindingAddress)
-    suspend fun updateBearerToken(token: String)
-    suspend fun generateNewBearerToken(): String
     suspend fun updateAutoStartOnBoot(enabled: Boolean)
-    suspend fun updateRestPort(port: Int)
-    suspend fun updateRestBearerToken(token: String)
-    suspend fun generateNewRestBearerToken(): String
-    suspend fun updateRestOverlayVisible(visible: Boolean)
-    suspend fun updateRestRefVisible(visible: Boolean)
+    suspend fun updateServicePort(port: Int)
+    suspend fun updateServiceBearerToken(token: String)
+    suspend fun generateNewServiceBearerToken(): String
+    suspend fun updateServiceOverlayVisible(visible: Boolean)
+    suspend fun updateServiceRefVisible(visible: Boolean)
     suspend fun updateAppLanguage(language: AppLanguage)
     suspend fun updateAppThemeMode(themeMode: AppThemeMode)
 

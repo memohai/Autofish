@@ -3,7 +3,6 @@ package com.memohai.autofish.services.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.content.res.Configuration
 import android.graphics.Bitmap
-import android.util.DisplayMetrics
 import android.view.accessibility.AccessibilityEvent
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
