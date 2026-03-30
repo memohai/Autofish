@@ -613,7 +613,11 @@ fn handle_observe_refs(
     trace_store: Option<&TraceStore>,
     ref_scope: &str,
 ) -> CommandResult {
-    let refs = api.screen_refs().map_err(CommandError::from)?;
+    let known_ref_version = trace_store
+        .and_then(|store| store.get_ref_version(ref_scope).ok().flatten());
+    let refs = api
+        .screen_refs(known_ref_version)
+        .map_err(CommandError::from)?;
     if let Some(store) = trace_store {
         if let Err(e) = store.upsert_ref_version(ref_scope, refs.ref_version) {
             eprintln!("warn: failed to persist refVersion: {e}");
@@ -644,6 +648,7 @@ fn handle_observe_refs(
             "mode": refs.mode,
             "hasWebView": refs.has_webview,
             "nodeReliability": refs.node_reliability,
+            "unchanged": refs.unchanged,
             "returnedRows": rows.len(),
             "rows": rows
         }),

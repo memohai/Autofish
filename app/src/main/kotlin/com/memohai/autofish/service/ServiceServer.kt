@@ -36,6 +36,19 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+internal fun shouldRebuildRefs(
+    hasCachedRefs: Boolean,
+    uiSeqChanged: Boolean,
+    nowMs: Long,
+    lastComputedAtMs: Long,
+    forceIntervalMs: Long,
+): Boolean {
+    if (!hasCachedRefs) return true
+    if (uiSeqChanged) return true
+    if (lastComputedAtMs <= 0L) return true
+    return nowMs - lastComputedAtMs >= forceIntervalMs
+}
+
 class ServiceServer(
     private val port: Int,
     private val bindAddress: String,
@@ -58,6 +71,11 @@ class ServiceServer(
     private var refConfig = RefConfig()
     @Volatile
     private var refState = RefState.empty()
+    @Volatile
+    private var lastRefUiChangeSeq: Long = -1L
+    @Volatile
+    private var lastRefComputedAtMs: Long = 0L
+    private val forceRefRebuildIntervalMs = 1_500L
 
     fun start() {
         server = embeddedServer(Netty, port = port, host = bindAddress) {
@@ -81,6 +99,8 @@ class ServiceServer(
             }
         }.start(wait = false)
         refreshRefState(collectScreenSnapshot())
+        lastRefUiChangeSeq = accessibilityProvider.getUiChangeSeq()
+        lastRefComputedAtMs = System.currentTimeMillis()
         if (refConfig.autoRefresh) {
             startRefAutoRefresh()
         }
@@ -167,6 +187,20 @@ class ServiceServer(
         }
 
         get("/screen/refs") {
+            val knownRefVersionRaw = call.request.queryParameters["known_ref_version"]
+            val knownRefVersion = if (knownRefVersionRaw == null) {
+                null
+            } else {
+                knownRefVersionRaw.toLongOrNull()?.takeIf { it >= 0L }
+                    ?: run {
+                        call.respondText(
+                            err("Invalid known_ref_version: $knownRefVersionRaw"),
+                            ContentType.Application.Json,
+                            HttpStatusCode.BadRequest,
+                        )
+                        return@get
+                    }
+            }
             val refsResult = resolveRefsState()
             val state = refsResult.state
             val rows = state.refs.take(refConfig.maxRefs.coerceAtLeast(1)).map {
@@ -190,6 +224,7 @@ class ServiceServer(
                 mode = refsResult.mode,
                 hasWebView = hasWebView,
                 nodeReliability = nodeReliability,
+                unchanged = knownRefVersion != null && knownRefVersion == state.version,
                 rows = rows,
             )
             call.respondText(ok(json.encodeToString(payload)), ContentType.Application.Json)
@@ -1046,6 +1081,7 @@ class ServiceServer(
         val mode: ToolRouter.Mode,
         val hasWebView: Boolean,
         val nodeReliability: String,
+        val unchanged: Boolean = false,
         val rows: List<RefRowPayload>,
     )
 
@@ -1092,8 +1128,26 @@ class ServiceServer(
 
     @Synchronized
     private fun resolveRefsState(): RefsResolveResult {
+        val now = System.currentTimeMillis()
+        val currentUiSeq = accessibilityProvider.getUiChangeSeq()
+        val shouldRebuild = shouldRebuildRefs(
+            hasCachedRefs = refState.refs.isNotEmpty(),
+            uiSeqChanged = currentUiSeq != lastRefUiChangeSeq,
+            nowMs = now,
+            lastComputedAtMs = lastRefComputedAtMs,
+            forceIntervalMs = forceRefRebuildIntervalMs,
+        )
+        if (!shouldRebuild) {
+            return RefsResolveResult(
+                state = refState,
+                mode = toolRouter.currentMode,
+            )
+        }
+
         val snapshot = collectScreenSnapshot()
         val state = refreshRefState(snapshot)
+        lastRefUiChangeSeq = currentUiSeq
+        lastRefComputedAtMs = now
         return RefsResolveResult(
             state = state,
             mode = snapshot.mode,
