@@ -12,18 +12,16 @@ fn parse_non_negative_f32(v: &str) -> Result<f32, String> {
     Ok(parsed)
 }
 
-fn parse_non_negative_points4(v: &str) -> Result<[f32; 4], String> {
+fn parse_non_negative_points2(v: &str) -> Result<[f32; 2], String> {
     let parts = v.split(',').map(str::trim).collect::<Vec<_>>();
-    if parts.len() != 4 {
+    if parts.len() != 2 {
         return Err(format!(
-            "points must contain exactly 4 comma-separated values: x1,y1,x2,y2; got '{v}'"
+            "points must contain exactly 2 comma-separated values: x,y; got '{v}'"
         ));
     }
-    let x1 = parse_non_negative_f32(parts[0])?;
-    let y1 = parse_non_negative_f32(parts[1])?;
-    let x2 = parse_non_negative_f32(parts[2])?;
-    let y2 = parse_non_negative_f32(parts[3])?;
-    Ok([x1, y1, x2, y2])
+    let x = parse_non_negative_f32(parts[0])?;
+    let y = parse_non_negative_f32(parts[1])?;
+    Ok([x, y])
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -31,6 +29,30 @@ pub enum ProxyMode {
     System,
     Direct,
     Auto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ScreenFieldArg {
+    Id,
+    Class,
+    Text,
+    Desc,
+    #[value(name = "resId")]
+    ResId,
+    Flags,
+    Bounds,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum MarkScope {
+    All,
+    Interactive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum RefreshMode {
+    On,
+    Off,
 }
 
 #[derive(Parser, Debug)]
@@ -96,36 +118,67 @@ pub enum Commands {
 pub enum ActCommands {
     #[command(
         name = "tap",
-        about = "Tap by coordinates or semantic selector",
-        long_about = "Tap by coordinates or semantic selector.\n\nCoordinate mode: `--x <X> --y <Y>` (both non-negative).\nSemantic mode: `--by <text|desc|resid|ref> --value <VALUE> [--exact-match]`.\nFor `--by ref`, `--value` must be a ref alias from `observe refs` (for example: `@n1`)."
+        about = "Tap by coordinates (`--xy`) or semantic selector (`--by/--value`)"
     )]
     #[command(group(
         ArgGroup::new("tap_mode")
             .required(true)
-            .args(["x", "by"])
+            .args(["xy", "by"])
     ))]
     Tap {
-        #[arg(long, allow_hyphen_values = true, value_parser = parse_non_negative_f32, requires = "y", conflicts_with_all = ["by", "value"])]
-        x: Option<f32>,
-        #[arg(long, allow_hyphen_values = true, value_parser = parse_non_negative_f32, requires = "x", conflicts_with_all = ["by", "value"])]
-        y: Option<f32>,
-        #[arg(long, requires = "value", conflicts_with_all = ["x", "y"])]
+        #[arg(
+            long,
+            value_name = "X,Y",
+            help = "Coordinates tuple (>= 0), for example: --xy 540,1200.",
+            value_parser = parse_non_negative_points2,
+            conflicts_with_all = ["by", "value"]
+        )]
+        xy: Option<[f32; 2]>,
+        #[arg(
+            long,
+            help = "Semantic selector: text | desc | resid | ref.",
+            requires = "value",
+            conflicts_with = "xy"
+        )]
         by: Option<String>,
-        #[arg(long, requires = "by", conflicts_with_all = ["x", "y"])]
+        #[arg(
+            long,
+            help = "Selector value. For --by ref, pass alias like @n1 from `observe refs`.",
+            requires = "by",
+            conflicts_with = "xy"
+        )]
         value: Option<String>,
-        #[arg(long, default_value_t = false)]
+        #[arg(
+            long,
+            help = "Use exact match in semantic mode (--by/--value).",
+            default_value_t = false
+        )]
         exact_match: bool,
     },
     #[command(
         name = "swipe",
-        about = "Swipe from (x1,y1) to (x2,y2), with optional duration in ms",
-        long_about = "Swipe from (x1,y1) to (x2,y2).\n\nUse positional tuple `x1,y1,x2,y2`.\nAll coordinates must be non-negative.\n`--duration` is in milliseconds (ms), default is 300."
+        about = "Swipe from one coordinate to another"
     )]
     Swipe {
-        #[arg(value_name = "x1,y1,x2,y2", value_parser = parse_non_negative_points4)]
-        coords: [f32; 4],
-        /// Swipe duration in milliseconds (ms)
-        #[arg(long, default_value_t = 300)]
+        #[arg(
+            long = "from",
+            value_name = "X,Y",
+            help = "Start coordinate (>= 0), for example: --from 100,1200.",
+            value_parser = parse_non_negative_points2
+        )]
+        from: [f32; 2],
+        #[arg(
+            long = "to",
+            value_name = "X,Y",
+            help = "End coordinate (>= 0), for example: --to 900,1200.",
+            value_parser = parse_non_negative_points2
+        )]
+        to: [f32; 2],
+        #[arg(
+            long,
+            help = "Swipe duration in milliseconds (ms).",
+            default_value_t = 300
+        )]
         duration: i64,
     },
     #[command(
@@ -182,58 +235,78 @@ pub enum ActCommands {
 pub enum ObserveCommands {
     #[command(
         name = "screen",
-        about = "Observe current UI tree snapshot",
-        long_about = "Observe current UI tree snapshot.\n\nOutput includes `hasWebView` and `nodeReliability`.\nWhen `hasWebView=true` or `nodeReliability=low`, node-based verification may be less reliable."
+        about = "Observe current UI tree snapshot"
     )]
     Screen {
-        #[arg(long, default_value = "compact")]
-        mode: String,
-        #[arg(long = "max-rows", default_value_t = 120)]
-        max_rows: usize,
-        #[arg(long, default_value = "id,class,text,desc,resId,flags")]
-        fields: String,
+        #[arg(
+            long,
+            help = "Return full snapshot (rows + raw). Cannot be used with --max-rows or --field."
+        )]
+        full: bool,
+        #[arg(
+            long = "max-rows",
+            help = "Maximum returned rows in compact mode. Default is 120.",
+            conflicts_with = "full"
+        )]
+        max_rows: Option<usize>,
+        #[arg(
+            long = "field",
+            value_name = "FIELD",
+            value_enum,
+            help = "Field to include in compact mode. Repeatable (for example: --field id --field text).",
+            conflicts_with = "full"
+        )]
+        fields: Vec<ScreenFieldArg>,
     },
     #[command(
         name = "overlay",
-        about = "Get or set server-side accessibility overlay state",
-        long_about = "Manage server-side accessibility overlay used by annotate features.\n\nIf `--enabled` is omitted, this command returns current overlay state.\n\nColor legend:\n- Green: generic interactive nodes\n- Orange: buttons\n- Cyan: input fields\n- Yellow: selection controls (checkbox/switch/radio)\n- Pink: scroll/list containers\n- Blue: text-bearing non-interactive nodes"
+        about = "Get or set server-side accessibility overlay state"
     )]
     Overlay {
-        #[arg(long)]
-        enabled: Option<bool>,
-        #[arg(long = "max-marks", default_value_t = 300)]
-        max_marks: usize,
-        /// default false: full marks, not only interactive nodes
-        #[arg(long)]
-        interactive_only: Option<bool>,
-        #[arg(long)]
-        auto_refresh: Option<bool>,
-        #[arg(long = "refresh-interval-ms", default_value_t = 800)]
-        refresh_interval_ms: u64,
-        #[arg(long = "offset-x")]
-        offset_x: Option<i32>,
-        #[arg(long = "offset-y")]
-        offset_y: Option<i32>,
+        #[command(subcommand)]
+        command: OverlayCommands,
     },
     #[command(
         name = "screenshot",
-        about = "Capture a compressed screenshot",
-        long_about = "Capture a compressed screenshot.\n\n`max-dim` limits the long edge of the image.\n`quality` is JPEG quality from 1 to 100 (higher = bigger file).\nUse `--annotate` to include server-side overlay marks in screenshot."
+        about = "Capture a compressed screenshot"
     )]
     Screenshot {
-        #[arg(long = "max-dim", default_value_t = 700)]
+        #[arg(
+            long = "max-dim",
+            value_parser = clap::value_parser!(i64).range(1..),
+            default_value_t = 700,
+            help = "Limit long edge of the image in pixels (>= 1)."
+        )]
         max_dim: i64,
-        #[arg(long, default_value_t = 80)]
+        #[arg(
+            long,
+            value_parser = clap::value_parser!(i64).range(1..=100),
+            default_value_t = 80,
+            help = "JPEG quality from 1 to 100."
+        )]
         quality: i64,
-        #[arg(long, default_value_t = false)]
+        #[arg(long, default_value_t = false, help = "Include overlay marks in screenshot.")]
         annotate: bool,
-        #[arg(long)]
-        hide_overlay: Option<bool>,
-        #[arg(long = "max-marks", default_value_t = 120)]
-        max_marks: usize,
-        /// default false: include both interactive and text-bearing nodes
-        #[arg(long)]
-        interactive_only: Option<bool>,
+        #[arg(
+            long,
+            default_value_t = false,
+            requires = "annotate",
+            help = "Temporarily hide on-screen overlay while rendering marks."
+        )]
+        hide_overlay: bool,
+        #[arg(
+            long = "max-marks",
+            requires = "annotate",
+            help = "Maximum marks when --annotate is enabled. Default is 120."
+        )]
+        max_marks: Option<usize>,
+        #[arg(
+            long = "mark-scope",
+            value_enum,
+            requires = "annotate",
+            help = "Mark scope when --annotate is enabled: all or interactive."
+        )]
+        mark_scope: Option<MarkScope>,
     },
     #[command(name = "top")]
     Top,
@@ -245,6 +318,49 @@ pub enum ObserveCommands {
     Refs {
         #[arg(long = "max-rows", default_value_t = 120)]
         max_rows: usize,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum OverlayCommands {
+    #[command(name = "get", about = "Get current overlay state")]
+    Get,
+    #[command(name = "set", about = "Set overlay state and behavior")]
+    #[command(group(
+        ArgGroup::new("overlay_state")
+            .required(true)
+            .args(["enable", "disable"])
+    ))]
+    Set {
+        #[arg(long, help = "Enable overlay.")]
+        enable: bool,
+        #[arg(long, help = "Disable overlay.")]
+        disable: bool,
+        #[arg(long = "max-marks", default_value_t = 300, help = "Maximum overlay marks.")]
+        max_marks: usize,
+        #[arg(
+            long = "mark-scope",
+            value_enum,
+            default_value_t = MarkScope::All,
+            help = "Overlay mark scope: all or interactive."
+        )]
+        mark_scope: MarkScope,
+        #[arg(
+            long = "refresh",
+            value_enum,
+            default_value_t = RefreshMode::On,
+            help = "Overlay auto refresh: on or off."
+        )]
+        refresh: RefreshMode,
+        #[arg(
+            long = "refresh-interval-ms",
+            help = "Refresh interval in milliseconds. Used when --refresh on."
+        )]
+        refresh_interval_ms: Option<u64>,
+        #[arg(long = "offset-x", help = "Overlay horizontal offset in pixels.")]
+        offset_x: Option<i32>,
+        #[arg(long = "offset-y", help = "Overlay vertical offset in pixels.")]
+        offset_y: Option<i32>,
     },
 }
 

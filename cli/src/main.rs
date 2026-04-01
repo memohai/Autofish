@@ -15,7 +15,10 @@ use std::time::Instant;
 
 use crate::api::request::{ApiClient, ApiError, ApiErrorKind};
 use crate::builder::ReqClientBuilder;
-use crate::cli::{ActCommands, Cli, Commands, ObserveCommands, RecoverCommands, VerifyCommands};
+use crate::cli::{
+    ActCommands, Cli, Commands, MarkScope, ObserveCommands, OverlayCommands, RecoverCommands,
+    RefreshMode, ScreenFieldArg, VerifyCommands,
+};
 use crate::core::error_code::ErrorCode;
 use crate::memory::{TraceRecord, TraceStore};
 
@@ -118,8 +121,7 @@ fn run_command(
         }
         Commands::Act { command } => match command {
             ActCommands::Tap {
-                x,
-                y,
+                xy,
                 by,
                 value,
                 exact_match,
@@ -129,23 +131,22 @@ fn run_command(
                 "tap",
                 handle_act_tap(
                     &api,
-                    *x,
-                    *y,
+                    *xy,
                     by.as_ref().map(|s| s.as_str()),
                     value.as_ref().map(|s| s.as_str()),
                     *exact_match,
                 ),
             ),
-            ActCommands::Swipe { coords, duration } => into_output(
+            ActCommands::Swipe { from, to, duration } => into_output(
                 &runtime.session_id,
                 "act",
                 "swipe",
                 handle_act_swipe(
                     &api,
-                    coords[0],
-                    coords[1],
-                    coords[2],
-                    coords[3],
+                    from[0],
+                    from[1],
+                    to[0],
+                    to[1],
                     *duration,
                 ),
             ),
@@ -181,42 +182,56 @@ fn run_command(
             ),
         },
         Commands::Observe { command } => match command {
-            ObserveCommands::Screen { mode, max_rows, fields } => into_output(
-                &runtime.session_id,
-                "observe",
-                "screen",
-                handle_observe_screen(&api, mode, *max_rows, fields),
-            ),
-            ObserveCommands::Overlay {
-                enabled,
-                max_marks,
-                interactive_only,
-                auto_refresh,
-                refresh_interval_ms,
-                offset_x,
-                offset_y,
+            ObserveCommands::Screen {
+                full,
+                max_rows,
+                fields,
             } => into_output(
                 &runtime.session_id,
                 "observe",
-                "overlay",
-                handle_observe_overlay(
-                    &api,
-                    *enabled,
-                    *max_marks,
-                    interactive_only.unwrap_or(false),
-                    auto_refresh.unwrap_or(true),
-                    *refresh_interval_ms,
-                    *offset_x,
-                    *offset_y,
-                ),
+                "screen",
+                handle_observe_screen(&api, *full, *max_rows, fields),
             ),
+            ObserveCommands::Overlay { command } => match command {
+                OverlayCommands::Get => into_output(
+                    &runtime.session_id,
+                    "observe",
+                    "overlay",
+                    handle_observe_overlay_get(&api),
+                ),
+                OverlayCommands::Set {
+                    enable,
+                    disable,
+                    max_marks,
+                    mark_scope,
+                    refresh,
+                    refresh_interval_ms,
+                    offset_x,
+                    offset_y,
+                } => into_output(
+                    &runtime.session_id,
+                    "observe",
+                    "overlay",
+                    handle_observe_overlay_set(
+                        &api,
+                        *enable,
+                        *disable,
+                        *max_marks,
+                        *mark_scope,
+                        *refresh,
+                        *refresh_interval_ms,
+                        *offset_x,
+                        *offset_y,
+                    ),
+                ),
+            },
             ObserveCommands::Screenshot {
                 max_dim,
                 quality,
                 annotate,
                 hide_overlay,
                 max_marks,
-                interactive_only,
+                mark_scope,
             } => into_output(
                 &runtime.session_id,
                 "observe",
@@ -228,7 +243,7 @@ fn run_command(
                     *annotate,
                     *hide_overlay,
                     *max_marks,
-                    interactive_only.unwrap_or(false),
+                    *mark_scope,
                 ),
             ),
             ObserveCommands::Top => into_output(
@@ -392,18 +407,17 @@ fn handle_health(api: &ApiClient<'_>) -> CommandResult {
 
 fn handle_act_tap(
     api: &ApiClient<'_>,
-    x: Option<f32>,
-    y: Option<f32>,
+    xy: Option<[f32; 2]>,
     by: Option<&str>,
     value: Option<&str>,
     exact_match: bool,
 ) -> CommandResult {
-    match (x, y, by, value) {
-        (Some(xv), Some(yv), None, None) => {
+    match (xy, by, value) {
+        (Some([xv, yv]), None, None) => {
             let msg = api.tap(xv, yv).map_err(CommandError::from)?;
             Ok(json!({"mode": "coords", "x": xv, "y": yv, "result": msg.message}))
         }
-        (None, None, Some(by_raw), Some(value_raw)) => {
+        (None, Some(by_raw), Some(value_raw)) => {
             if value_raw.trim().is_empty() {
                 return Err(CommandError::invalid_params("value must not be empty"));
             }
@@ -416,7 +430,7 @@ fn handle_act_tap(
             )
         }
         _ => Err(CommandError::invalid_params(
-            "tap requires either (--x and --y) or (--by and --value), and these two modes cannot be mixed",
+            "tap requires either --xy or (--by and --value), and these modes cannot be mixed",
         )),
     }
 }
@@ -470,19 +484,12 @@ fn handle_act_key(api: &ApiClient<'_>, key_code: i32) -> CommandResult {
 
 fn handle_observe_screen(
     api: &ApiClient<'_>,
-    mode: &str,
-    max_rows: usize,
-    fields: &str,
+    full: bool,
+    max_rows: Option<usize>,
+    fields: &[ScreenFieldArg],
 ) -> CommandResult {
-    let full = match mode {
-        "compact" => false,
-        "full" => true,
-        _ => {
-            return Err(CommandError::invalid_params(
-                "mode must be compact or full",
-            ));
-        }
-    };
+    let selected_fields = parse_screen_fields(fields);
+    let max_rows = max_rows.unwrap_or(120);
     let screen = api.screen().map_err(CommandError::from)?;
     let total_rows = screen.rows.len();
     if full {
@@ -499,7 +506,6 @@ fn handle_observe_screen(
         );
     }
 
-    let selected_fields = parse_screen_fields(fields)?;
     let rows = screen
         .rows
         .into_iter()
@@ -521,30 +527,49 @@ fn handle_observe_screen(
     )
 }
 
-fn handle_observe_overlay(
+fn handle_observe_overlay_get(
     api: &ApiClient<'_>,
-    enabled: Option<bool>,
+) -> CommandResult {
+    let state = api.overlay_get().map_err(CommandError::from)?;
+    Ok(state.payload)
+}
+
+fn handle_observe_overlay_set(
+    api: &ApiClient<'_>,
+    enable: bool,
+    disable: bool,
     max_marks: usize,
-    interactive_only: bool,
-    auto_refresh: bool,
-    refresh_interval_ms: u64,
+    mark_scope: MarkScope,
+    refresh: RefreshMode,
+    refresh_interval_ms: Option<u64>,
     offset_x: Option<i32>,
     offset_y: Option<i32>,
 ) -> CommandResult {
-    let state = if let Some(target) = enabled {
-        api.overlay_set(
+    if enable == disable {
+        return Err(CommandError::invalid_params(
+            "overlay set requires exactly one of --enable or --disable",
+        ));
+    }
+    if matches!(refresh, RefreshMode::Off) && refresh_interval_ms.is_some() {
+        return Err(CommandError::invalid_params(
+            "--refresh-interval-ms cannot be used when --refresh off",
+        ));
+    }
+    let target = enable && !disable;
+    let interactive_only = matches!(mark_scope, MarkScope::Interactive);
+    let auto_refresh = matches!(refresh, RefreshMode::On);
+    let interval = refresh_interval_ms.unwrap_or(800);
+    let state = api
+        .overlay_set(
             target,
             max_marks,
             interactive_only,
             auto_refresh,
-            refresh_interval_ms,
+            interval,
             offset_x,
             offset_y,
         )
-            .map_err(CommandError::from)?
-    } else {
-        api.overlay_get().map_err(CommandError::from)?
-    };
+        .map_err(CommandError::from)?;
     Ok(state.payload)
 }
 
@@ -553,16 +578,18 @@ fn handle_observe_screenshot(
     max_dim: i64,
     quality: i64,
     annotate: bool,
-    hide_overlay: Option<bool>,
-    max_marks: usize,
-    interactive_only: bool,
+    hide_overlay: bool,
+    max_marks: Option<usize>,
+    mark_scope: Option<MarkScope>,
 ) -> CommandResult {
+    let interactive_only = matches!(mark_scope.unwrap_or(MarkScope::All), MarkScope::Interactive);
+    let max_marks = max_marks.unwrap_or(120);
     let shot = api
         .screenshot(
             max_dim,
             quality,
             annotate,
-            hide_overlay,
+            if hide_overlay { Some(true) } else { None },
             max_marks,
             interactive_only,
         )
@@ -574,7 +601,7 @@ fn handle_observe_screenshot(
         "annotate": annotate,
         "hideOverlay": hide_overlay,
         "maxMarks": max_marks,
-        "interactiveOnly": interactive_only
+        "markScope": if interactive_only { "interactive" } else { "all" }
     }))
 }
 
@@ -790,47 +817,35 @@ fn handle_recover_relaunch(api: &ApiClient<'_>, package_name: &str) -> CommandRe
     Ok(json!({"packageName": package_name, "launchResult": launch.message}))
 }
 
-fn parse_screen_fields(fields: &str) -> Result<Vec<String>, CommandError> {
-    let supported = ["id", "class", "text", "desc", "resId", "flags", "bounds"];
-    let mut parsed = fields
-        .split(',')
-        .map(|f| f.trim())
-        .filter(|f| !f.is_empty())
-        .map(normalize_field_name)
-        .collect::<Vec<_>>();
-    if parsed.is_empty() {
-        parsed = vec![
-            "id".to_string(),
-            "class".to_string(),
-            "text".to_string(),
-            "desc".to_string(),
-            "resId".to_string(),
-            "flags".to_string(),
-        ];
-    }
-    for p in &parsed {
-        if !supported.contains(&p.as_str()) {
-            return Err(CommandError::invalid_params(format!(
-                "unsupported field '{p}', supported: id,class,text,desc,resId,flags,bounds"
-            )));
-        }
+fn parse_screen_fields(fields: &[ScreenFieldArg]) -> Vec<String> {
+    let default_fields = vec![
+        "id".to_string(),
+        "class".to_string(),
+        "text".to_string(),
+        "desc".to_string(),
+        "resId".to_string(),
+        "flags".to_string(),
+    ];
+    if fields.is_empty() {
+        return default_fields;
     }
     let mut out = Vec::<String>::new();
-    for p in parsed {
-        if !out.contains(&p) {
-            out.push(p);
+    for f in fields {
+        let name = match f {
+            ScreenFieldArg::Id => "id",
+            ScreenFieldArg::Class => "class",
+            ScreenFieldArg::Text => "text",
+            ScreenFieldArg::Desc => "desc",
+            ScreenFieldArg::ResId => "resId",
+            ScreenFieldArg::Flags => "flags",
+            ScreenFieldArg::Bounds => "bounds",
+        }
+        .to_string();
+        if !out.contains(&name) {
+            out.push(name);
         }
     }
-    Ok(out)
-}
-
-fn normalize_field_name(field: &str) -> String {
-    match field {
-        "nodeId" => "id".to_string(),
-        "className" => "class".to_string(),
-        "res_id" => "resId".to_string(),
-        x => x.to_string(),
-    }
+    out
 }
 
 fn compact_row_json(row: crate::api::request::ScreenRow, fields: &[String]) -> Value {
