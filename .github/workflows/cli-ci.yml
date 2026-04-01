@@ -112,7 +112,10 @@ jobs:
           META_TARBALL="$(cd "$WORKROOT/meta" && npm pack | tail -n1)"
           npm install -g "$WORKROOT/meta/$META_TARBALL"
           PREFIX="$(npm prefix -g)"
-          "$PREFIX/bin/af" --help > /dev/null
+          echo "Running af smoke on ${{ matrix.target }}"
+          HELP_OUT="$("$PREFIX/bin/af" --help)"
+          printf '%s\n' "$HELP_OUT" | sed -n '1,5p'
+          echo "af smoke ok: ${{ matrix.target }}"
 
       - name: Prepare npm smoke workroot (windows)
         if: runner.os == 'Windows'
@@ -136,4 +139,7 @@ jobs:
           Pop-Location
           npm install -g (Join-Path $metaDir $metaTarball)
           $prefix = npm prefix -g
-          & (Join-Path $prefix "af.cmd") --help | Out-Null
+          Write-Host "Running af smoke on ${{ matrix.target }}"
+          $helpOut = & (Join-Path $prefix "af.cmd") --help
+          $helpOut | Select-Object -First 5
+          Write-Host "af smoke ok: ${{ matrix.target }}"
