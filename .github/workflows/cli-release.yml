@@ -83,12 +83,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f "skills/android-stepwise-control/SKILL.md"
+          test -f "skills/autofish-control/SKILL.md"
           VERSION="${GITHUB_REF_NAME:-cli-dev}"
           ARCHIVE="${VERSION}-${{ matrix.target }}.tar.gz"
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
-          cp "skills/android-stepwise-control/SKILL.md" dist/SKILL.md
+          cp "skills/autofish-control/SKILL.md" dist/SKILL.md
           cp README.md dist/README.md
           cp ../LICENSE dist/LICENSE
           tar -C dist -czf "${ARCHIVE}" .
@@ -98,12 +98,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if (-Not (Test-Path "skills/android-stepwise-control/SKILL.md")) { throw "SKILL.md not found" }
+          if (-Not (Test-Path "skills/autofish-control/SKILL.md")) { throw "SKILL.md not found" }
           $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "cli-dev" }
           $Archive = "$Version-${{ matrix.target }}.zip"
           New-Item -ItemType Directory -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
-          Copy-Item "skills/android-stepwise-control/SKILL.md" "dist/SKILL.md"
+          Copy-Item "skills/autofish-control/SKILL.md" "dist/SKILL.md"
           Copy-Item "README.md" "dist/README.md"
           Copy-Item "../LICENSE" "dist/LICENSE"
           Compress-Archive -Path "dist/*" -DestinationPath $Archive
