@@ -73,6 +73,17 @@ pub struct ActionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverlaySetRequest {
+    pub enabled: bool,
+    pub max_marks: usize,
+    pub interactive_only: bool,
+    pub auto_refresh: bool,
+    pub refresh_interval_ms: u64,
+    pub offset_x: Option<i32>,
+    pub offset_y: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScreenResponse {
     pub raw: String,
     pub mode: Option<String>,
@@ -195,12 +206,7 @@ impl<'a> ApiClient<'a> {
         Ok(ActionResponse { message })
     }
 
-    pub fn tap_node(
-        &self,
-        by: &str,
-        value: &str,
-        exact_match: bool,
-    ) -> ApiResult<ActionResponse> {
+    pub fn tap_node(&self, by: &str, value: &str, exact_match: bool) -> ApiResult<ActionResponse> {
         let message = self.authed_post_envelope(
             "/api/nodes/tap",
             Some(json!({"by": by, "value": value, "exact_match": exact_match})),
@@ -312,35 +318,26 @@ impl<'a> ApiClient<'a> {
         Ok(OverlayResponse { payload })
     }
 
-    pub fn overlay_set(
-        &self,
-        enabled: bool,
-        max_marks: usize,
-        interactive_only: bool,
-        auto_refresh: bool,
-        refresh_interval_ms: u64,
-        offset_x: Option<i32>,
-        offset_y: Option<i32>,
-    ) -> ApiResult<OverlayResponse> {
+    pub fn overlay_set(&self, request: &OverlaySetRequest) -> ApiResult<OverlayResponse> {
         let mut body = serde_json::Map::new();
-        body.insert("enabled".to_string(), json!(enabled));
-        body.insert("max_marks".to_string(), json!(max_marks));
-        body.insert("interactive_only".to_string(), json!(interactive_only));
-        body.insert("auto_refresh".to_string(), json!(auto_refresh));
+        body.insert("enabled".to_string(), json!(request.enabled));
+        body.insert("max_marks".to_string(), json!(request.max_marks));
+        body.insert(
+            "interactive_only".to_string(),
+            json!(request.interactive_only),
+        );
+        body.insert("auto_refresh".to_string(), json!(request.auto_refresh));
         body.insert(
             "refresh_interval_ms".to_string(),
-            json!(refresh_interval_ms),
+            json!(request.refresh_interval_ms),
         );
-        if let Some(v) = offset_x {
+        if let Some(v) = request.offset_x {
             body.insert("offset_x".to_string(), json!(v));
         }
-        if let Some(v) = offset_y {
+        if let Some(v) = request.offset_y {
             body.insert("offset_y".to_string(), json!(v));
         }
-        let raw = self.authed_post_envelope(
-            "/api/overlay",
-            Some(Value::Object(body)),
-        )?;
+        let raw = self.authed_post_envelope("/api/overlay", Some(Value::Object(body)))?;
         let payload = parse_embedded_json(&raw, "/api/overlay")?;
         Ok(OverlayResponse { payload })
     }
@@ -698,11 +695,8 @@ fn parse_screen_row(line: &str) -> Option<ScreenRow> {
 }
 
 fn has_webview_nodes(rows: &[ScreenRow]) -> bool {
-    rows.iter().any(|row| {
-        row.class_name
-            .to_ascii_lowercase()
-            .contains("webview")
-    })
+    rows.iter()
+        .any(|row| row.class_name.to_ascii_lowercase().contains("webview"))
 }
 
 fn infer_node_reliability(has_webview: bool, row_count: usize) -> &'static str {

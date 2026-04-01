@@ -155,10 +155,7 @@ pub enum ActCommands {
         )]
         exact_match: bool,
     },
-    #[command(
-        name = "swipe",
-        about = "Swipe from one coordinate to another"
-    )]
+    #[command(name = "swipe", about = "Swipe from one coordinate to another")]
     Swipe {
         #[arg(
             long = "from",
@@ -233,10 +230,7 @@ pub enum ActCommands {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum ObserveCommands {
-    #[command(
-        name = "screen",
-        about = "Observe current UI tree snapshot"
-    )]
+    #[command(name = "screen", about = "Observe current UI tree snapshot")]
     Screen {
         #[arg(
             long,
@@ -266,10 +260,7 @@ pub enum ObserveCommands {
         #[command(subcommand)]
         command: OverlayCommands,
     },
-    #[command(
-        name = "screenshot",
-        about = "Capture a compressed screenshot"
-    )]
+    #[command(name = "screenshot", about = "Capture a compressed screenshot")]
     Screenshot {
         #[arg(
             long = "max-dim",
@@ -285,7 +276,11 @@ pub enum ObserveCommands {
             help = "JPEG quality from 1 to 100."
         )]
         quality: i64,
-        #[arg(long, default_value_t = false, help = "Include overlay marks in screenshot.")]
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Include overlay marks in screenshot."
+        )]
         annotate: bool,
         #[arg(
             long,
@@ -336,7 +331,11 @@ pub enum OverlayCommands {
         enable: bool,
         #[arg(long, help = "Disable overlay.")]
         disable: bool,
-        #[arg(long = "max-marks", default_value_t = 300, help = "Maximum overlay marks.")]
+        #[arg(
+            long = "max-marks",
+            default_value_t = 300,
+            help = "Maximum overlay marks."
+        )]
         max_marks: usize,
         #[arg(
             long = "mark-scope",

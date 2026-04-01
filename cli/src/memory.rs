@@ -45,7 +45,6 @@ impl TraceStore {
             .with_context(|| "failed to insert trace record")?;
         Ok(())
     }
-
 }
 
 fn init_trace_table(connection: &Connection) -> anyhow::Result<()> {

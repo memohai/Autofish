@@ -13,7 +13,7 @@ use std::hash::{Hash, Hasher};
 use std::process;
 use std::time::Instant;
 
-use crate::api::request::{ApiClient, ApiError, ApiErrorKind};
+use crate::api::request::{ApiClient, ApiError, ApiErrorKind, OverlaySetRequest};
 use crate::builder::ReqClientBuilder;
 use crate::cli::{
     ActCommands, Cli, Commands, MarkScope, ObserveCommands, OverlayCommands, RecoverCommands,
@@ -50,7 +50,13 @@ fn main() -> anyhow::Result<()> {
         trace_store.as_ref(),
         &ref_scope,
     );
-    persist_trace(&trace_store, &cli, &runtime.session_id, &result, started.elapsed().as_millis());
+    persist_trace(
+        &trace_store,
+        &cli,
+        &runtime.session_id,
+        &result,
+        started.elapsed().as_millis(),
+    );
     println!("{}", serde_json::to_string(&result)?);
 
     let exit_code = match result.get("status").and_then(|x| x.as_str()) {
@@ -141,14 +147,7 @@ fn run_command(
                 &runtime.session_id,
                 "act",
                 "swipe",
-                handle_act_swipe(
-                    &api,
-                    from[0],
-                    from[1],
-                    to[0],
-                    to[1],
-                    *duration,
-                ),
+                handle_act_swipe(&api, from[0], from[1], to[0], to[1], *duration),
             ),
             ActCommands::Back => {
                 into_output(&runtime.session_id, "act", "back", handle_act_back(&api))
@@ -214,14 +213,21 @@ fn run_command(
                     "overlay",
                     handle_observe_overlay_set(
                         &api,
-                        *enable,
-                        *disable,
-                        *max_marks,
-                        *mark_scope,
-                        *refresh,
-                        *refresh_interval_ms,
-                        *offset_x,
-                        *offset_y,
+                        OverlaySetOptions {
+                            enabled: if *enable {
+                                true
+                            } else if *disable {
+                                false
+                            } else {
+                                unreachable!("clap requires exactly one of --enable or --disable")
+                            },
+                            max_marks: *max_marks,
+                            mark_scope: *mark_scope,
+                            refresh: *refresh,
+                            refresh_interval_ms: *refresh_interval_ms,
+                            offset_x: *offset_x,
+                            offset_y: *offset_y,
+                        },
                     ),
                 ),
             },
@@ -493,17 +499,15 @@ fn handle_observe_screen(
     let screen = api.screen().map_err(CommandError::from)?;
     let total_rows = screen.rows.len();
     if full {
-        return Ok(
-            json!({
-                "mode": screen.mode,
-                "rowCount": total_rows,
-                "rows": screen.rows,
-                "raw": screen.raw,
-                "full": true,
-                "hasWebView": screen.has_webview,
-                "nodeReliability": screen.node_reliability
-            }),
-        );
+        return Ok(json!({
+            "mode": screen.mode,
+            "rowCount": total_rows,
+            "rows": screen.rows,
+            "raw": screen.raw,
+            "full": true,
+            "hasWebView": screen.has_webview,
+            "nodeReliability": screen.node_reliability
+        }));
     }
 
     let rows = screen
@@ -512,64 +516,50 @@ fn handle_observe_screen(
         .take(max_rows)
         .map(|r| compact_row_json(r, &selected_fields))
         .collect::<Vec<_>>();
-    Ok(
-        json!({
-            "mode": screen.mode,
-            "rowCount": total_rows,
-            "returnedRows": rows.len(),
-            "truncated": total_rows > rows.len(),
-            "rows": rows,
-            "full": false,
-            "fields": selected_fields,
-            "hasWebView": screen.has_webview,
-            "nodeReliability": screen.node_reliability
-        }),
-    )
+    Ok(json!({
+        "mode": screen.mode,
+        "rowCount": total_rows,
+        "returnedRows": rows.len(),
+        "truncated": total_rows > rows.len(),
+        "rows": rows,
+        "full": false,
+        "fields": selected_fields,
+        "hasWebView": screen.has_webview,
+        "nodeReliability": screen.node_reliability
+    }))
 }
 
-fn handle_observe_overlay_get(
-    api: &ApiClient<'_>,
-) -> CommandResult {
+fn handle_observe_overlay_get(api: &ApiClient<'_>) -> CommandResult {
     let state = api.overlay_get().map_err(CommandError::from)?;
     Ok(state.payload)
 }
 
-fn handle_observe_overlay_set(
-    api: &ApiClient<'_>,
-    enable: bool,
-    disable: bool,
+struct OverlaySetOptions {
+    enabled: bool,
     max_marks: usize,
     mark_scope: MarkScope,
     refresh: RefreshMode,
     refresh_interval_ms: Option<u64>,
     offset_x: Option<i32>,
     offset_y: Option<i32>,
-) -> CommandResult {
-    if enable == disable {
-        return Err(CommandError::invalid_params(
-            "overlay set requires exactly one of --enable or --disable",
-        ));
-    }
-    if matches!(refresh, RefreshMode::Off) && refresh_interval_ms.is_some() {
+}
+
+fn handle_observe_overlay_set(api: &ApiClient<'_>, options: OverlaySetOptions) -> CommandResult {
+    if matches!(options.refresh, RefreshMode::Off) && options.refresh_interval_ms.is_some() {
         return Err(CommandError::invalid_params(
             "--refresh-interval-ms cannot be used when --refresh off",
         ));
     }
-    let target = enable && !disable;
-    let interactive_only = matches!(mark_scope, MarkScope::Interactive);
-    let auto_refresh = matches!(refresh, RefreshMode::On);
-    let interval = refresh_interval_ms.unwrap_or(800);
-    let state = api
-        .overlay_set(
-            target,
-            max_marks,
-            interactive_only,
-            auto_refresh,
-            interval,
-            offset_x,
-            offset_y,
-        )
-        .map_err(CommandError::from)?;
+    let request = OverlaySetRequest {
+        enabled: options.enabled,
+        max_marks: options.max_marks,
+        interactive_only: matches!(options.mark_scope, MarkScope::Interactive),
+        auto_refresh: matches!(options.refresh, RefreshMode::On),
+        refresh_interval_ms: options.refresh_interval_ms.unwrap_or(800),
+        offset_x: options.offset_x,
+        offset_y: options.offset_y,
+    };
+    let state = api.overlay_set(&request).map_err(CommandError::from)?;
     Ok(state.payload)
 }
 
@@ -634,18 +624,16 @@ fn handle_observe_refs(
             })
         })
         .collect::<Vec<_>>();
-    Ok(
-        json!({
-            "refVersion": refs.ref_version,
-            "refCount": refs.ref_count,
-            "updatedAtMs": refs.updated_at_ms,
-            "mode": refs.mode,
-            "hasWebView": refs.has_webview,
-            "nodeReliability": refs.node_reliability,
-            "returnedRows": rows.len(),
-            "rows": rows
-        }),
-    )
+    Ok(json!({
+        "refVersion": refs.ref_version,
+        "refCount": refs.ref_count,
+        "updatedAtMs": refs.updated_at_ms,
+        "mode": refs.mode,
+        "hasWebView": refs.has_webview,
+        "nodeReliability": refs.node_reliability,
+        "returnedRows": rows.len(),
+        "rows": rows
+    }))
 }
 
 fn handle_verify_text_contains(
