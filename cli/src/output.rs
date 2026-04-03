@@ -34,17 +34,6 @@ impl CommandError {
             details: Some(details),
         }
     }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self {
-            code: ErrorCode::InternalError,
-            message: message.into(),
-            retryable: false,
-            status: None,
-            raw: None,
-            details: None,
-        }
-    }
 }
 
 impl From<ApiError> for CommandError {
