@@ -61,6 +61,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          apksigner_bin="$(find "${ANDROID_HOME}/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n1)"
+          if [[ -z "${apksigner_bin}" ]]; then
+            echo "apksigner not found under ${ANDROID_HOME}/build-tools" >&2
+            exit 1
+          fi
           shopt -s nullglob
           apks=(app/build/outputs/apk/release/*.apk)
           if (( ${#apks[@]} == 0 )); then
@@ -68,7 +73,7 @@ jobs:
             exit 1
           fi
           for apk in "${apks[@]}"; do
-            apksigner verify --verbose --print-certs "$apk"
+            "${apksigner_bin}" verify --verbose --print-certs "$apk"
           done
 
       - name: Collect APKs
