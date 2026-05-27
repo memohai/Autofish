@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.1-rc.1] - 2026-05-28
+
+Range: `app-v0.5.0` / `cli-v0.5.0` .. `app-v0.5.1-rc.1` / `cli-v0.5.1-rc.1`
+
 ### Fixed
 - Sign app release APKs in the GitHub release workflow and verify release artifacts with `apksigner` before publishing.
 - Verify debug APK signatures in Android CI so installability regressions are caught earlier.
+- Rename app APK artifacts from `auto-fish-*.apk` to `autofish-*.apk`, while keeping CLI install fallback support for older release asset names.
 
 ## [0.5.0] - 2026-05-16
 

@@ -132,7 +132,7 @@ android {
 androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
-            output.outputFileName.set("auto-fish-$versionNameProp-${variant.buildType}.apk")
+            output.outputFileName.set("autofish-$versionNameProp-${variant.buildType}.apk")
         }
     }
 }

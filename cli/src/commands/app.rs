@@ -354,7 +354,7 @@ fn resolve_release(client: &Client, requested: &str) -> Result<ReleaseAsset, Com
 
 pub fn release_for_version(version: &str) -> ReleaseAsset {
     let tag = format!("app-v{version}");
-    let asset = format!("auto-fish-{version}-release.apk");
+    let asset = release_asset_name(version);
     ReleaseAsset {
         version: version.to_string(),
         github_url: github_download_url(&tag, &asset),
@@ -376,6 +376,14 @@ fn validate_version(version: &str) -> Result<(), CommandError> {
 
 fn github_download_url(tag: &str, asset: &str) -> String {
     format!("{DOWNLOAD_BASE}/{tag}/{asset}")
+}
+
+fn release_asset_name(version: &str) -> String {
+    format!("autofish-{version}-release.apk")
+}
+
+fn legacy_release_asset_name(version: &str) -> String {
+    format!("auto-fish-{version}-release.apk")
 }
 
 fn latest_app_release(client: &Client) -> Result<ReleaseAsset, CommandError> {
@@ -424,7 +432,7 @@ fn latest_app_release(client: &Client) -> Result<ReleaseAsset, CommandError> {
         });
         let version = tag.trim_start_matches("app-v").to_string();
         let (asset, github_url) = asset.unwrap_or_else(|| {
-            let asset = format!("auto-fish-{version}-release.apk");
+            let asset = release_asset_name(&version);
             let url = github_download_url(tag, &asset);
             (asset, url)
         });
@@ -458,23 +466,62 @@ fn resolve_apk(client: &Client, target: &ReleaseAsset) -> Result<DownloadedApk, 
             .map_err(|e| CommandError::internal(format!("failed to create APK cache: {e}")))?;
     }
 
-    download_to_cache(client, &target.github_url, &cache_path).map_err(|github_error| {
-        CommandError {
-            code: ErrorCode::NetworkError,
-            message: "failed to download Autofish APK from GitHub".to_string(),
-            retryable: true,
-            status: None,
-            raw: None,
-            details: Some(json!({
-                "githubUrl": target.github_url,
-                "githubError": github_error,
-            })),
+    match download_to_cache(client, &target.github_url, &cache_path) {
+        Ok(()) => Ok(DownloadedApk {
+            path: cache_path,
+            source: "github",
+        }),
+        Err(github_error) if should_try_legacy_release_asset(target) => {
+            let legacy_asset = legacy_release_asset_name(&target.version);
+            let legacy_url = github_download_url(&target.tag, &legacy_asset);
+            let legacy_cache_path = cache_path_for(&target.version, &legacy_asset)?;
+            if let Some(parent) = legacy_cache_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    CommandError::internal(format!("failed to create APK cache: {e}"))
+                })?;
+            }
+            download_to_cache(client, &legacy_url, &legacy_cache_path)
+                .map(|()| DownloadedApk {
+                    path: legacy_cache_path,
+                    source: "github",
+                })
+                .map_err(|legacy_error| {
+                    download_error(
+                        &target.github_url,
+                        github_error,
+                        Some((&legacy_url, legacy_error)),
+                    )
+                })
         }
-    })?;
-    Ok(DownloadedApk {
-        path: cache_path,
-        source: "github",
-    })
+        Err(github_error) => Err(download_error(&target.github_url, github_error, None)),
+    }
+}
+
+fn should_try_legacy_release_asset(target: &ReleaseAsset) -> bool {
+    target.asset == release_asset_name(&target.version)
+}
+
+fn download_error(
+    github_url: &str,
+    github_error: String,
+    legacy_failure: Option<(&str, String)>,
+) -> CommandError {
+    let mut details = json!({
+        "githubUrl": github_url,
+        "githubError": github_error,
+    });
+    if let Some((legacy_url, legacy_error)) = legacy_failure {
+        details["legacyGithubUrl"] = json!(legacy_url);
+        details["legacyGithubError"] = json!(legacy_error);
+    }
+    CommandError {
+        code: ErrorCode::NetworkError,
+        message: "failed to download Autofish APK from GitHub".to_string(),
+        retryable: true,
+        status: None,
+        raw: None,
+        details: Some(details),
+    }
 }
 
 fn cache_path_for(version: &str, asset: &str) -> Result<PathBuf, CommandError> {
@@ -517,10 +564,10 @@ mod tests {
     fn derives_release_from_version() {
         let release = release_for_version("0.4.0");
         assert_eq!(release.tag, "app-v0.4.0");
-        assert_eq!(release.asset, "auto-fish-0.4.0-release.apk");
+        assert_eq!(release.asset, "autofish-0.4.0-release.apk");
         assert_eq!(
             release.github_url,
-            "https://github.com/memohai/Autofish/releases/download/app-v0.4.0/auto-fish-0.4.0-release.apk"
+            "https://github.com/memohai/Autofish/releases/download/app-v0.4.0/autofish-0.4.0-release.apk"
         );
     }
 
