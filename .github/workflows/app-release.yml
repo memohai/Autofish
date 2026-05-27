@@ -26,8 +26,50 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Decode release keystore
+        shell: bash
+        env:
+          AUTOFISH_RELEASE_KEYSTORE_BASE64: ${{ secrets.AUTOFISH_RELEASE_KEYSTORE_BASE64 }}
+          AUTOFISH_RELEASE_STORE_PASSWORD: ${{ secrets.AUTOFISH_RELEASE_STORE_PASSWORD }}
+          AUTOFISH_RELEASE_KEY_ALIAS: ${{ secrets.AUTOFISH_RELEASE_KEY_ALIAS }}
+          AUTOFISH_RELEASE_KEY_PASSWORD: ${{ secrets.AUTOFISH_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for secret_name in \
+            AUTOFISH_RELEASE_KEYSTORE_BASE64 \
+            AUTOFISH_RELEASE_STORE_PASSWORD \
+            AUTOFISH_RELEASE_KEY_ALIAS \
+            AUTOFISH_RELEASE_KEY_PASSWORD
+          do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "$secret_name is required for app releases" >&2
+              exit 1
+            fi
+          done
+          mkdir -p "$RUNNER_TEMP/autofish-signing"
+          printf '%s' "${AUTOFISH_RELEASE_KEYSTORE_BASE64}" | base64 --decode > "$RUNNER_TEMP/autofish-signing/release.keystore"
+
       - name: Build release APK
+        env:
+          AUTOFISH_RELEASE_STORE_FILE: ${{ runner.temp }}/autofish-signing/release.keystore
+          AUTOFISH_RELEASE_STORE_PASSWORD: ${{ secrets.AUTOFISH_RELEASE_STORE_PASSWORD }}
+          AUTOFISH_RELEASE_KEY_ALIAS: ${{ secrets.AUTOFISH_RELEASE_KEY_ALIAS }}
+          AUTOFISH_RELEASE_KEY_PASSWORD: ${{ secrets.AUTOFISH_RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
+
+      - name: Verify release APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          if (( ${#apks[@]} == 0 )); then
+            echo "No release APKs found" >&2
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            apksigner verify --verbose --print-certs "$apk"
+          done
 
       - name: Collect APKs
         shell: bash
