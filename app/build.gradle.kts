@@ -48,6 +48,16 @@ val versionCodeProp =
         rawVersionCodeProp!!
     }
 
+val releaseStoreFile = providers.environmentVariable("AUTOFISH_RELEASE_STORE_FILE")
+val releaseStorePassword = providers.environmentVariable("AUTOFISH_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("AUTOFISH_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("AUTOFISH_RELEASE_KEY_PASSWORD")
+val hasReleaseSigningConfig =
+    releaseStoreFile.isPresent &&
+        releaseStorePassword.isPresent &&
+        releaseKeyAlias.isPresent &&
+        releaseKeyPassword.isPresent
+
 android {
     namespace = "com.memohai.autofish"
     compileSdk = 36
@@ -58,6 +68,17 @@ android {
         targetSdk = 34
         versionCode = versionCodeProp
         versionName = versionNameProp
+    }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+            }
+        }
     }
 
     buildTypes {
@@ -73,6 +94,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

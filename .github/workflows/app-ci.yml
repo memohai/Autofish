@@ -36,6 +36,25 @@ jobs:
       - name: Run Android quality checks
         run: ./gradlew ktlintCheck detekt testDebugUnitTest assembleDebug assembleRelease --stacktrace
 
+      - name: Verify debug APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apksigner_bin="$(find "${ANDROID_HOME}/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n1)"
+          if [[ -z "${apksigner_bin}" ]]; then
+            echo "apksigner not found under ${ANDROID_HOME}/build-tools" >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/debug/*.apk)
+          if (( ${#apks[@]} == 0 )); then
+            echo "No debug APKs found" >&2
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            "${apksigner_bin}" verify --verbose --print-certs "$apk"
+          done
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v6
         with:

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Sign app release APKs in the GitHub release workflow and verify release artifacts with `apksigner` before publishing.
+- Verify debug APK signatures in Android CI so installability regressions are caught earlier.
+
 ## [0.5.0] - 2026-05-16
 
 Range: `app-v0.4.0` / `cli-v0.4.0` .. `app-v0.5.0` / `cli-v0.5.0`
