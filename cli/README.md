@@ -60,8 +60,20 @@ af memory experience --app com.android.settings --activity com.android.settings/
   - `uninstall` removes the official Autofish App over adb.
 - `connect`:
   - `usb` reads the App connection hint, creates adb forwarding, verifies `/health`, and writes local connection metadata.
+- `completion`:
+  - generates shell completion scripts for `bash`, `zsh`, `fish`, `powershell`, or `elvish`.
 
 See [docs/CLI_MEMORY.md](../docs/CLI_MEMORY.md) for memory design details.
+
+## Shell Completion
+
+`af completion <shell>` writes the completion script to stdout. It does not edit shell startup files.
+
+```bash
+af completion zsh > ~/.zsh/completions/_af
+af completion fish > ~/.config/fish/completions/af.fish
+af completion bash > ~/.local/share/bash-completion/completions/af
+```
 
 ## Output and exit code
 

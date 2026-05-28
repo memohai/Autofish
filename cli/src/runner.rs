@@ -64,6 +64,7 @@ pub fn run_command(
             run_recover_command(&runtime.invocation_id, &api, command)
         }
         Commands::Config { .. } => unreachable!("config commands are handled locally"),
+        Commands::Completion { .. } => unreachable!("completion commands are handled locally"),
     }
 }
 

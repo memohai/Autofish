@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, ValueEnum};
+use clap_complete::Shell;
 
 fn parse_non_negative_f32(v: &str) -> Result<f32, String> {
     let parsed = v
@@ -105,8 +106,19 @@ pub enum RefreshMode {
     Off,
 }
 
+const CLI_ABOUT: &str = concat!(
+    "Autofish CLI ",
+    env!("CARGO_PKG_VERSION"),
+    "\nMemohAI\n\n",
+    "autofish (af) controls Android devices through the Autofish service and local adb helpers.\n\n",
+    "It provides deterministic commands for observing screens, tapping refs,\n",
+    "verifying state, managing local tool memory, installing the Autofish Android\n",
+    "app, and configuring USB forwarding.\n\n",
+    "Project home page: https://github.com/memohai/Autofish"
+);
+
 #[derive(Parser, Debug)]
-#[command(name = "af", about = "Deterministic executor for Autofish REST API")]
+#[command(name = "af", about = CLI_ABOUT, long_about = CLI_ABOUT)]
 pub struct Cli {
     #[arg(long, env = "AF_CONFIG", value_hint = clap::ValueHint::FilePath)]
     pub config: Option<PathBuf>,
@@ -219,6 +231,11 @@ pub enum Commands {
     Connect {
         #[command(subcommand)]
         command: ConnectCommands,
+    },
+    #[command(name = "completion", about = "Generate shell completion script")]
+    Completion {
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -697,6 +714,15 @@ mod tests {
     fn memory_commands_parse_without_url() {
         let cli = Cli::parse_from(["af", "--session", "demo", "memory", "log", "--limit", "5"]);
         assert!(matches!(cli.command, Commands::Memory { .. }));
+    }
+
+    #[test]
+    fn completion_command_parses_as_local_command() {
+        let cli = Cli::parse_from(["af", "completion", "zsh"]);
+        match cli.command {
+            Commands::Completion { shell } => assert_eq!(shell, Shell::Zsh),
+            _ => panic!("expected completion command"),
+        }
     }
 
     #[test]

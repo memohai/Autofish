@@ -13,7 +13,7 @@ mod progress;
 mod runner;
 
 use crate::builder::ReqClientBuilder;
-use crate::cli::Cli;
+use crate::cli::{Cli, Commands};
 use crate::config::{require_token, require_url, resolve_settings};
 use crate::memory::MemoryStore;
 use crate::output::render_output;
@@ -21,7 +21,8 @@ use crate::runner::{
     persist_memory, run_app_command, run_command, run_config_command, run_connect_command,
     run_memory_command,
 };
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use crossbeam_channel::{Receiver, bounded, select};
 use std::process;
 use std::time::Instant;
@@ -29,13 +30,19 @@ use std::time::Instant;
 fn main() -> anyhow::Result<()> {
     let ctrl_c_events = ctrl_channel()?;
     let cli = Cli::parse();
+    if let Commands::Completion { shell } = cli.command {
+        let mut command = Cli::command();
+        generate(shell, &mut command, "af", &mut std::io::stdout());
+        return Ok(());
+    }
     let settings = resolve_settings(&cli)?;
     let memory_store = if cli.no_memory
         || matches!(
             cli.command,
-            crate::cli::Commands::Config { .. }
-                | crate::cli::Commands::App { .. }
-                | crate::cli::Commands::Connect { .. }
+            Commands::Config { .. }
+                | Commands::App { .. }
+                | Commands::Connect { .. }
+                | Commands::Completion { .. }
         ) {
         None
     } else {
@@ -43,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     };
     let started = Instant::now();
     let result = match &cli.command {
-        crate::cli::Commands::Health { remote } => {
+        Commands::Health { remote } => {
             let runtime = ReqClientBuilder::new(
                 require_url(&settings)?.trim_end_matches('/').to_string(),
                 remote.timeout_ms,
@@ -67,10 +74,10 @@ fn main() -> anyhow::Result<()> {
             );
             result
         }
-        crate::cli::Commands::Act { remote, .. }
-        | crate::cli::Commands::Observe { remote, .. }
-        | crate::cli::Commands::Verify { remote, .. }
-        | crate::cli::Commands::Recover { remote, .. } => {
+        Commands::Act { remote, .. }
+        | Commands::Observe { remote, .. }
+        | Commands::Verify { remote, .. }
+        | Commands::Recover { remote, .. } => {
             let runtime = ReqClientBuilder::new(
                 require_url(&settings)?.trim_end_matches('/').to_string(),
                 remote.timeout_ms,
@@ -95,22 +102,23 @@ fn main() -> anyhow::Result<()> {
             );
             result
         }
-        crate::cli::Commands::Memory { .. } => {
+        Commands::Memory { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
             run_memory_command(&invocation_id, &cli, memory_store.as_ref())
         }
-        crate::cli::Commands::Config { .. } => {
+        Commands::Config { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
             run_config_command(&invocation_id, &cli, &settings)
         }
-        crate::cli::Commands::App { .. } => {
+        Commands::App { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
             run_app_command(&invocation_id, &cli, settings.output)
         }
-        crate::cli::Commands::Connect { .. } => {
+        Commands::Connect { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
             run_connect_command(&invocation_id, &cli, &settings)
         }
+        Commands::Completion { .. } => unreachable!("completion exits before settings resolution"),
     };
     println!("{}", render_output(&result, settings.output)?);
 
