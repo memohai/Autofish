@@ -49,232 +49,257 @@ pub fn run_command(
     let command = &cli.command;
 
     match command {
-        Commands::Health { .. } => into_output(
-            &runtime.invocation_id,
-            "health",
-            "health",
-            observe_health(&api, settings),
-        ),
-        Commands::Act { command, .. } => match command {
-            ActCommands::Tap {
-                xy,
-                by,
-                value,
-                exact_match,
-            } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "tap",
-                act::handle_tap(
-                    &api,
-                    *xy,
-                    by.as_ref().map(|v| v.as_str()),
-                    value.as_ref().map(|v| v.as_str()),
-                    *exact_match,
-                ),
-            ),
-            ActCommands::Swipe { from, to, duration } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "swipe",
-                act::handle_swipe(&api, from[0], from[1], to[0], to[1], *duration),
-            ),
-            ActCommands::Back => into_output(
-                &runtime.invocation_id,
-                "act",
-                "back",
-                act::handle_back(&api),
-            ),
-            ActCommands::Home => into_output(
-                &runtime.invocation_id,
-                "act",
-                "home",
-                act::handle_home(&api),
-            ),
-            ActCommands::Text { text } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "text",
-                act::handle_text(&api, text),
-            ),
-            ActCommands::Launch { package_name } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "launch",
-                act::handle_launch(&api, package_name),
-            ),
-            ActCommands::Stop { package_name } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "stop",
-                act::handle_stop(&api, package_name),
-            ),
-            ActCommands::Key { key_code } => into_output(
-                &runtime.invocation_id,
-                "act",
-                "key",
-                act::handle_key(&api, *key_code),
-            ),
-        },
-        Commands::Observe { command, .. } => match command {
-            ObserveCommands::Screen {
-                full,
-                save_file,
-                max_rows,
-                fields,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "screen",
-                observe::handle_screen(
-                    &api,
-                    &artifacts,
-                    *full,
-                    save_file.as_deref(),
-                    *max_rows,
-                    fields,
-                ),
-            ),
-            ObserveCommands::Overlay { command } => match command {
-                OverlayCommands::Get => into_output(
-                    &runtime.invocation_id,
-                    "observe",
-                    "overlay",
-                    observe::handle_overlay_get(&api),
-                ),
-                OverlayCommands::Set {
-                    enable,
-                    disable,
-                    max_marks,
-                    mark_scope,
-                    refresh,
-                    refresh_interval_ms,
-                    offset_x,
-                    offset_y,
-                } => into_output(
-                    &runtime.invocation_id,
-                    "observe",
-                    "overlay",
-                    observe::handle_overlay_set(
-                        &api,
-                        OverlaySetOptions {
-                            enabled: if *enable {
-                                true
-                            } else if *disable {
-                                false
-                            } else {
-                                unreachable!("clap requires exactly one of --enable or --disable")
-                            },
-                            max_marks: *max_marks,
-                            mark_scope: *mark_scope,
-                            refresh: *refresh,
-                            refresh_interval_ms: *refresh_interval_ms,
-                            offset_x: *offset_x,
-                            offset_y: *offset_y,
-                        },
-                    ),
-                ),
-            },
-            ObserveCommands::Screenshot {
-                save_file,
-                max_dim,
-                quality,
-                annotate,
-                hide_overlay,
-                max_marks,
-                mark_scope,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "screenshot",
-                observe::handle_screenshot(
-                    &api,
-                    &artifacts,
-                    ScreenshotOptions {
-                        max_dim: *max_dim,
-                        quality: *quality,
-                        annotate: *annotate,
-                        hide_overlay: *hide_overlay,
-                        max_marks: *max_marks,
-                        mark_scope: *mark_scope,
-                        save_file: save_file.as_deref(),
-                    },
-                ),
-            ),
-            ObserveCommands::Top => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "top",
-                observe::handle_top(&api),
-            ),
-            ObserveCommands::Refs { max_rows } => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "refs",
-                observe::handle_refs(&api, *max_rows),
-            ),
-            ObserveCommands::Page {
-                save_dir,
-                fields,
-                max_rows,
-            } => into_output(
-                &runtime.invocation_id,
-                "observe",
-                "page",
-                observe::handle_page(&api, &artifacts, save_dir.as_deref(), fields, *max_rows),
-            ),
-        },
-        Commands::Verify { command, .. } => match command {
-            VerifyCommands::TextContains {
-                text,
-                case_sensitive,
-            } => into_output(
-                &runtime.invocation_id,
-                "verify",
-                "text-contains",
-                verify::handle_text_contains(&api, text, !*case_sensitive),
-            ),
-            VerifyCommands::TopActivity { expected, mode } => into_output(
-                &runtime.invocation_id,
-                "verify",
-                "top-activity",
-                verify::handle_top_activity(&api, expected, mode),
-            ),
-            VerifyCommands::NodeExists {
-                by,
-                value,
-                exact_match,
-            } => into_output(
-                &runtime.invocation_id,
-                "verify",
-                "node-exists",
-                verify::handle_node_exists(&api, by, value, *exact_match),
-            ),
-        },
+        Commands::Health { .. } => run_health_command(&runtime.invocation_id, &api, settings),
+        Commands::Act { command, .. } => run_act_command(&runtime.invocation_id, &api, command),
+        Commands::Observe { command, .. } => {
+            run_observe_command(&runtime.invocation_id, &api, &artifacts, command)
+        }
+        Commands::Verify { command, .. } => {
+            run_verify_command(&runtime.invocation_id, &api, command)
+        }
         Commands::Memory { .. } => unreachable!("memory commands are handled locally"),
         Commands::App { .. } => unreachable!("app commands are handled locally"),
         Commands::Connect { .. } => unreachable!("connect commands are handled locally"),
-        Commands::Recover { command, .. } => match command {
-            RecoverCommands::Back { times } => into_output(
-                &runtime.invocation_id,
-                "recover",
-                "back",
-                recover::handle_back(&api, *times),
-            ),
-            RecoverCommands::Home => into_output(
-                &runtime.invocation_id,
-                "recover",
-                "home",
-                recover::handle_home(&api),
-            ),
-            RecoverCommands::Relaunch { package_name } => into_output(
-                &runtime.invocation_id,
-                "recover",
-                "relaunch",
-                recover::handle_relaunch(&api, package_name),
-            ),
-        },
+        Commands::Recover { command, .. } => {
+            run_recover_command(&runtime.invocation_id, &api, command)
+        }
         Commands::Config { .. } => unreachable!("config commands are handled locally"),
+    }
+}
+
+fn run_health_command(
+    invocation_id: &str,
+    api: &ApiClient<'_>,
+    settings: &ResolvedSettings,
+) -> Value {
+    into_output(
+        invocation_id,
+        "health",
+        "health",
+        observe_health(api, settings),
+    )
+}
+
+fn run_act_command(invocation_id: &str, api: &ApiClient<'_>, command: &ActCommands) -> Value {
+    match command {
+        ActCommands::Tap {
+            xy,
+            by,
+            value,
+            exact_match,
+        } => into_output(
+            invocation_id,
+            "act",
+            "tap",
+            act::handle_tap(
+                api,
+                *xy,
+                by.as_ref().map(|v| v.as_str()),
+                value.as_ref().map(|v| v.as_str()),
+                *exact_match,
+            ),
+        ),
+        ActCommands::Swipe { from, to, duration } => into_output(
+            invocation_id,
+            "act",
+            "swipe",
+            act::handle_swipe(api, from[0], from[1], to[0], to[1], *duration),
+        ),
+        ActCommands::Back => into_output(invocation_id, "act", "back", act::handle_back(api)),
+        ActCommands::Home => into_output(invocation_id, "act", "home", act::handle_home(api)),
+        ActCommands::Text { text } => {
+            into_output(invocation_id, "act", "text", act::handle_text(api, text))
+        }
+        ActCommands::Launch { package_name } => into_output(
+            invocation_id,
+            "act",
+            "launch",
+            act::handle_launch(api, package_name),
+        ),
+        ActCommands::Stop { package_name } => into_output(
+            invocation_id,
+            "act",
+            "stop",
+            act::handle_stop(api, package_name),
+        ),
+        ActCommands::Key { key_code } => {
+            into_output(invocation_id, "act", "key", act::handle_key(api, *key_code))
+        }
+    }
+}
+
+fn run_observe_command(
+    invocation_id: &str,
+    api: &ApiClient<'_>,
+    artifacts: &ArtifactManager<'_>,
+    command: &ObserveCommands,
+) -> Value {
+    match command {
+        ObserveCommands::Screen {
+            full,
+            save_file,
+            max_rows,
+            fields,
+        } => into_output(
+            invocation_id,
+            "observe",
+            "screen",
+            observe::handle_screen(
+                api,
+                artifacts,
+                *full,
+                save_file.as_deref(),
+                *max_rows,
+                fields,
+            ),
+        ),
+        ObserveCommands::Overlay { command } => run_overlay_command(invocation_id, api, command),
+        ObserveCommands::Screenshot {
+            save_file,
+            max_dim,
+            quality,
+            annotate,
+            hide_overlay,
+            max_marks,
+            mark_scope,
+        } => into_output(
+            invocation_id,
+            "observe",
+            "screenshot",
+            observe::handle_screenshot(
+                api,
+                artifacts,
+                ScreenshotOptions {
+                    max_dim: *max_dim,
+                    quality: *quality,
+                    annotate: *annotate,
+                    hide_overlay: *hide_overlay,
+                    max_marks: *max_marks,
+                    mark_scope: *mark_scope,
+                    save_file: save_file.as_deref(),
+                },
+            ),
+        ),
+        ObserveCommands::Top => {
+            into_output(invocation_id, "observe", "top", observe::handle_top(api))
+        }
+        ObserveCommands::Refs { max_rows } => into_output(
+            invocation_id,
+            "observe",
+            "refs",
+            observe::handle_refs(api, *max_rows),
+        ),
+        ObserveCommands::Page {
+            save_dir,
+            fields,
+            max_rows,
+        } => into_output(
+            invocation_id,
+            "observe",
+            "page",
+            observe::handle_page(api, artifacts, save_dir.as_deref(), fields, *max_rows),
+        ),
+    }
+}
+
+fn run_overlay_command(
+    invocation_id: &str,
+    api: &ApiClient<'_>,
+    command: &OverlayCommands,
+) -> Value {
+    match command {
+        OverlayCommands::Get => into_output(
+            invocation_id,
+            "observe",
+            "overlay",
+            observe::handle_overlay_get(api),
+        ),
+        OverlayCommands::Set {
+            enable,
+            disable,
+            max_marks,
+            mark_scope,
+            refresh,
+            refresh_interval_ms,
+            offset_x,
+            offset_y,
+        } => into_output(
+            invocation_id,
+            "observe",
+            "overlay",
+            observe::handle_overlay_set(
+                api,
+                OverlaySetOptions {
+                    enabled: if *enable {
+                        true
+                    } else if *disable {
+                        false
+                    } else {
+                        unreachable!("clap requires exactly one of --enable or --disable")
+                    },
+                    max_marks: *max_marks,
+                    mark_scope: *mark_scope,
+                    refresh: *refresh,
+                    refresh_interval_ms: *refresh_interval_ms,
+                    offset_x: *offset_x,
+                    offset_y: *offset_y,
+                },
+            ),
+        ),
+    }
+}
+
+fn run_verify_command(invocation_id: &str, api: &ApiClient<'_>, command: &VerifyCommands) -> Value {
+    match command {
+        VerifyCommands::TextContains {
+            text,
+            case_sensitive,
+        } => into_output(
+            invocation_id,
+            "verify",
+            "text-contains",
+            verify::handle_text_contains(api, text, !*case_sensitive),
+        ),
+        VerifyCommands::TopActivity { expected, mode } => into_output(
+            invocation_id,
+            "verify",
+            "top-activity",
+            verify::handle_top_activity(api, expected, mode),
+        ),
+        VerifyCommands::NodeExists {
+            by,
+            value,
+            exact_match,
+        } => into_output(
+            invocation_id,
+            "verify",
+            "node-exists",
+            verify::handle_node_exists(api, by, value, *exact_match),
+        ),
+    }
+}
+
+fn run_recover_command(
+    invocation_id: &str,
+    api: &ApiClient<'_>,
+    command: &RecoverCommands,
+) -> Value {
+    match command {
+        RecoverCommands::Back { times } => into_output(
+            invocation_id,
+            "recover",
+            "back",
+            recover::handle_back(api, *times),
+        ),
+        RecoverCommands::Home => {
+            into_output(invocation_id, "recover", "home", recover::handle_home(api))
+        }
+        RecoverCommands::Relaunch { package_name } => into_output(
+            invocation_id,
+            "recover",
+            "relaunch",
+            recover::handle_relaunch(api, package_name),
+        ),
     }
 }
 
@@ -679,6 +704,220 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].category, "act");
         assert_eq!(events[0].op, "back");
+    }
+
+    #[test]
+    fn run_memory_command_save_search_delete_round_trip() {
+        let store = Some(MemoryStore::new_in_memory().expect("init"));
+        let save_cli = Cli::parse_from([
+            "af",
+            "--session",
+            "wf-test",
+            "memory",
+            "save",
+            "--app",
+            "com.a",
+            "--topic",
+            "nav/wifi",
+            "--content",
+            "open settings then wifi",
+        ]);
+
+        let save = run_memory_command("invoke-save", &save_cli, store.as_ref());
+        assert_eq!(save["status"], "ok");
+        assert_eq!(save["category"], "memory");
+        assert_eq!(save["op"], "save");
+        assert_eq!(save["data"]["app"], "com.a");
+        assert_eq!(save["data"]["topic"], "nav/wifi");
+        let note_id = save["data"]["id"].as_i64().expect("note id");
+
+        let search_cli = Cli::parse_from([
+            "af", "memory", "search", "--app", "com.a", "--topic", "nav", "--query", "wifi",
+        ]);
+        let search = run_memory_command("invoke-search", &search_cli, store.as_ref());
+        assert_eq!(search["status"], "ok");
+        assert_eq!(search["category"], "memory");
+        assert_eq!(search["op"], "search");
+        assert_eq!(search["data"]["notes"][0]["id"], note_id);
+        assert_eq!(search["data"]["notes"][0]["session"], "wf-test");
+
+        let delete_cli = Cli::parse_from(["af", "memory", "delete", "--id", &note_id.to_string()]);
+        let delete = run_memory_command("invoke-delete", &delete_cli, store.as_ref());
+        assert_eq!(delete["status"], "ok");
+        assert_eq!(delete["op"], "delete");
+        assert_eq!(delete["data"]["deleted"], true);
+        assert_eq!(delete["data"]["id"], note_id);
+    }
+
+    #[test]
+    fn run_memory_command_log_stats_and_context_use_in_memory_store() {
+        let store = Some(MemoryStore::new_in_memory().expect("init"));
+        let s = store.as_ref().expect("store");
+        s.update_session_activity("wf-test", "com.a", "com.a/.Main", "2026-01-01T00:00:00Z")
+            .expect("context");
+        s.record_event(&crate::memory::EventRecord {
+            session: "wf-test",
+            app: "com.a",
+            activity: "com.a/.Main",
+            page_fingerprint: "",
+            category: "act",
+            op: "back",
+            args_json: "{}",
+            status: "ok",
+            error_code: None,
+            failure_cause: None,
+            evidence_json: "{}",
+            duration_ms: 9,
+        })
+        .expect("event");
+
+        let log_cli = Cli::parse_from([
+            "af",
+            "memory",
+            "log",
+            "--for-session",
+            "wf-test",
+            "--app",
+            "com.a",
+            "--status",
+            "ok",
+        ]);
+        let log = run_memory_command("invoke-log", &log_cli, store.as_ref());
+        assert_eq!(log["status"], "ok");
+        assert_eq!(log["op"], "log");
+        assert_eq!(log["data"]["events"][0]["category"], "act");
+        assert_eq!(log["data"]["events"][0]["op"], "back");
+        assert_eq!(log["data"]["events"][0]["duration_ms"], 9);
+
+        let stats_cli = Cli::parse_from(["af", "memory", "stats", "--for-session", "wf-test"]);
+        let stats = run_memory_command("invoke-stats", &stats_cli, store.as_ref());
+        assert_eq!(stats["status"], "ok");
+        assert_eq!(stats["op"], "stats");
+        assert_eq!(stats["data"]["total_events"], 1);
+        assert_eq!(stats["data"]["ok_count"], 1);
+        assert_eq!(stats["data"]["act_count"], 1);
+
+        let context_cli = Cli::parse_from(["af", "--session", "wf-test", "memory", "context"]);
+        let context = run_memory_command("invoke-context", &context_cli, store.as_ref());
+        assert_eq!(context["status"], "ok");
+        assert_eq!(context["op"], "context");
+        assert_eq!(context["data"]["session"], "wf-test");
+        assert_eq!(context["data"]["app"], "com.a");
+        assert_eq!(context["data"]["activity"], "com.a/.Main");
+    }
+
+    #[test]
+    fn run_memory_command_experience_returns_transitions_and_recoveries() {
+        let store = Some(MemoryStore::new_in_memory().expect("init"));
+        let s = store.as_ref().expect("store");
+        let pre = PageContext {
+            app: "com.a".into(),
+            activity: "com.a/.Main".into(),
+            page_fingerprint: "act=com.a/.Main|wv=0|rid=list".into(),
+            fingerprint_source: "screen".into(),
+            mode: "".into(),
+            has_webview: false,
+            node_reliability: "high".into(),
+            ref_version: None,
+            observed_at: "".into(),
+        };
+        let post = PageContext {
+            app: "com.a".into(),
+            activity: "com.a/.Detail".into(),
+            page_fingerprint: "act=com.a/.Detail|wv=0|rid=detail".into(),
+            fingerprint_source: "screen".into(),
+            mode: "".into(),
+            has_webview: false,
+            node_reliability: "high".into(),
+            ref_version: None,
+            observed_at: "".into(),
+        };
+        let action = crate::memory::Event {
+            id: 1,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            session: "wf-test".into(),
+            app: pre.app.clone(),
+            activity: pre.activity.clone(),
+            page_fingerprint: pre.page_fingerprint.clone(),
+            category: "act".into(),
+            op: "tap".into(),
+            args_json: r#"{"by":"text","value":"Item"}"#.into(),
+            status: "ok".into(),
+            error_code: None,
+            failure_cause: None,
+            evidence_json: "{}".into(),
+            duration_ms: 10,
+        };
+        let verify = crate::memory::Event {
+            id: 2,
+            created_at: "2026-01-01T00:00:01Z".into(),
+            session: "wf-test".into(),
+            app: post.app.clone(),
+            activity: post.activity.clone(),
+            page_fingerprint: post.page_fingerprint.clone(),
+            category: "verify".into(),
+            op: "text-contains".into(),
+            args_json: r#"{"text":"Detail"}"#.into(),
+            status: "ok".into(),
+            error_code: None,
+            failure_cause: None,
+            evidence_json: "{}".into(),
+            duration_ms: 4,
+        };
+        let recover = crate::memory::Event {
+            id: 3,
+            created_at: "2026-01-01T00:00:02Z".into(),
+            session: "wf-test".into(),
+            app: pre.app.clone(),
+            activity: pre.activity.clone(),
+            page_fingerprint: pre.page_fingerprint.clone(),
+            category: "recover".into(),
+            op: "back".into(),
+            args_json: r#"{"times":1}"#.into(),
+            status: "ok".into(),
+            error_code: None,
+            failure_cause: None,
+            evidence_json: "{}".into(),
+            duration_ms: 5,
+        };
+        s.upsert_transition(&pre, &action, &post, &verify, true)
+            .expect("transition");
+        s.upsert_recovery(&pre, "REF_ALIAS_STALE", &recover)
+            .expect("recovery");
+
+        let cli = Cli::parse_from([
+            "af",
+            "memory",
+            "experience",
+            "--app",
+            "com.a",
+            "--activity",
+            "com.a/.Main",
+            "--page-fp",
+            &pre.page_fingerprint,
+            "--failure-cause",
+            "REF_ALIAS_STALE",
+        ]);
+        let output = run_memory_command("invoke-experience", &cli, store.as_ref());
+
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["op"], "experience");
+        assert_eq!(
+            output["data"]["query"]["pageFingerprint"],
+            pre.page_fingerprint
+        );
+        assert_eq!(output["data"]["transitions"][0]["matchScope"], "page");
+        assert_eq!(output["data"]["transitions"][0]["action"], "act tap");
+        assert_eq!(
+            output["data"]["transitions"][0]["verifyOp"],
+            "text-contains"
+        );
+        assert_eq!(output["data"]["recoveries"][0]["matchScope"], "page");
+        assert_eq!(
+            output["data"]["recoveries"][0]["failureCause"],
+            "REF_ALIAS_STALE"
+        );
+        assert_eq!(output["data"]["recoveries"][0]["recovery"], "recover back");
     }
 
     #[test]
