@@ -14,8 +14,12 @@
   "bin": {
     "af": "bin/af.js"
   },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.mjs"
+  },
   "files": [
     "bin/af.js",
+    "scripts/postinstall.mjs",
     "README.md"
   ],
   "keywords": [
