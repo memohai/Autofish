@@ -143,6 +143,18 @@ const ANCHOR_CLASSES: &[&str] = &[
     "DialogTitle",
 ];
 
+const EVENT_COLUMNS: &str = "id, created_at, session, app, activity, page_fingerprint,
+        category, op, args_json, status, error_code, failure_cause, evidence_json, duration_ms";
+const NOTE_COLUMNS: &str = "id, app, topic, content, session, created_at";
+const TRANSITION_COLUMNS: &str = "pre_app, pre_activity, pre_page_fingerprint,
+        action_category, action_op, action_args_json,
+        post_app, post_activity, post_page_fingerprint,
+        verify_op, verify_args_json,
+        success_count, verified_count, failure_count, last_success_at";
+const RECOVERY_COLUMNS: &str = "pre_app, pre_activity, pre_page_fingerprint,
+        failure_cause, recovery_category, recovery_op, recovery_args_json,
+        success_count, failure_count, last_success_at";
+
 /// Rows from screen or refs used for fingerprint computation.
 pub struct FingerprintRow<'a> {
     pub class_name: Option<&'a str>,
@@ -367,15 +379,9 @@ impl MemoryStore {
     }
 
     pub fn get_event_by_id(&self, id: i64) -> anyhow::Result<Option<Event>> {
+        let sql = select_events_sql("WHERE id = ?1");
         self.connection
-            .query_row(
-                "SELECT id, created_at, session, app, activity, page_fingerprint,
-                        category, op, args_json, status, error_code,
-                        failure_cause, evidence_json, duration_ms
-                 FROM events WHERE id = ?1",
-                params![id],
-                read_event_row,
-            )
+            .query_row(&sql, params![id], read_event_row)
             .optional()
             .with_context(|| format!("failed to get event {id}"))
     }
@@ -387,12 +393,7 @@ impl MemoryStore {
         status: Option<&str>,
         limit: usize,
     ) -> anyhow::Result<Vec<Event>> {
-        let mut sql = String::from(
-            "SELECT id, created_at, session, app, activity, page_fingerprint,
-                    category, op, args_json, status, error_code,
-                    failure_cause, evidence_json, duration_ms
-             FROM events WHERE 1=1",
-        );
+        let mut sql = select_events_sql("WHERE 1=1");
         let mut bind_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
         let mut idx = 0usize;
         if let Some(v) = session {
@@ -414,24 +415,7 @@ impl MemoryStore {
         let refs: Vec<&dyn rusqlite::types::ToSql> =
             bind_values.iter().map(|b| b.as_ref()).collect();
         let mut stmt = self.connection.prepare(&sql)?;
-        let rows = stmt.query_map(refs.as_slice(), |row| {
-            Ok(Event {
-                id: row.get(0)?,
-                created_at: row.get(1)?,
-                session: row.get(2)?,
-                app: row.get(3)?,
-                activity: row.get(4)?,
-                page_fingerprint: row.get(5)?,
-                category: row.get(6)?,
-                op: row.get(7)?,
-                args_json: row.get(8)?,
-                status: row.get(9)?,
-                error_code: row.get(10)?,
-                failure_cause: row.get(11)?,
-                evidence_json: row.get(12)?,
-                duration_ms: row.get(13)?,
-            })
-        })?;
+        let rows = stmt.query_map(refs.as_slice(), read_event_row)?;
         rows.collect::<Result<Vec<_>, _>>()
             .with_context(|| "failed to collect events")
     }
@@ -505,13 +489,8 @@ impl MemoryStore {
         session: &str,
         before_id: i64,
     ) -> anyhow::Result<Option<Event>> {
-        self.connection
-            .query_row(
-                "SELECT id, created_at, session, app, activity, page_fingerprint,
-                        category, op, args_json, status, error_code,
-                        failure_cause, evidence_json, duration_ms
-                 FROM events
-                 WHERE session = ?1 AND id < ?2 AND category = 'act'
+        let sql = select_events_sql(
+            "WHERE session = ?1 AND id < ?2 AND category = 'act'
                    AND NOT EXISTS (
                        SELECT 1 FROM events e2
                        WHERE e2.session = ?1
@@ -529,9 +508,9 @@ impl MemoryStore {
                          )
                    )
                  ORDER BY id DESC LIMIT 1",
-                params![session, before_id],
-                read_event_row,
-            )
+        );
+        self.connection
+            .query_row(&sql, params![session, before_id], read_event_row)
             .optional()
             .with_context(|| "failed to query previous action event")
     }
@@ -545,13 +524,8 @@ impl MemoryStore {
         session: &str,
         before_id: i64,
     ) -> anyhow::Result<Option<Event>> {
-        self.connection
-            .query_row(
-                "SELECT id, created_at, session, app, activity, page_fingerprint,
-                        category, op, args_json, status, error_code,
-                        failure_cause, evidence_json, duration_ms
-                 FROM events
-                 WHERE session = ?1 AND id < ?2 AND status = 'failed'
+        let sql = select_events_sql(
+            "WHERE session = ?1 AND id < ?2 AND status = 'failed'
                        AND category IN ('act', 'verify')
                    AND NOT EXISTS (
                        SELECT 1 FROM events e2
@@ -561,9 +535,9 @@ impl MemoryStore {
                          AND e2.category IN ('act', 'verify')
                    )
                  ORDER BY id DESC LIMIT 1",
-                params![session, before_id],
-                read_event_row,
-            )
+        );
+        self.connection
+            .query_row(&sql, params![session, before_id], read_event_row)
             .optional()
             .with_context(|| "failed to query previous failed event")
     }
@@ -701,36 +675,13 @@ impl MemoryStore {
         params: P,
         limit: usize,
     ) -> anyhow::Result<()> {
-        let sql = format!(
-            "SELECT pre_app, pre_activity, pre_page_fingerprint,
-                    action_category, action_op, action_args_json,
-                    post_app, post_activity, post_page_fingerprint,
-                    verify_op, verify_args_json,
-                    success_count, verified_count, failure_count, last_success_at
-             FROM transitions WHERE {where_sql}
+        let sql = select_transitions_sql(&format!(
+            "WHERE {where_sql}
              ORDER BY verified_count DESC, failure_count ASC, last_success_at DESC
-             LIMIT {limit}"
-        );
+             LIMIT {limit}",
+        ));
         let mut stmt = self.connection.prepare(&sql)?;
-        let rows = stmt.query_map(params, |row| {
-            Ok(Transition {
-                pre_app: row.get(0)?,
-                pre_activity: row.get(1)?,
-                pre_page_fingerprint: row.get(2)?,
-                action_category: row.get(3)?,
-                action_op: row.get(4)?,
-                action_args_json: row.get(5)?,
-                post_app: row.get(6)?,
-                post_activity: row.get(7)?,
-                post_page_fingerprint: row.get(8)?,
-                verify_op: row.get(9)?,
-                verify_args_json: row.get(10)?,
-                success_count: row.get(11)?,
-                verified_count: row.get(12)?,
-                failure_count: row.get(13)?,
-                last_success_at: row.get(14)?,
-            })
-        })?;
+        let rows = stmt.query_map(params, read_transition_row)?;
         for row in rows {
             out.push((scope.to_string(), row?));
         }
@@ -810,52 +761,41 @@ impl MemoryStore {
                            base_where: &str,
                            limit: usize|
          -> anyhow::Result<()> {
-            let sql = format!(
-                "SELECT pre_app, pre_activity, pre_page_fingerprint,
-                        failure_cause, recovery_category, recovery_op, recovery_args_json,
-                        success_count, failure_count, last_success_at
-                 FROM recoveries WHERE {base_where}{fc_clause}
+            let sql = select_recoveries_sql(&format!(
+                "WHERE {base_where}{fc_clause}
                  ORDER BY success_count DESC, failure_count ASC
-                 LIMIT {limit}"
-            );
+                 LIMIT {limit}",
+            ));
             let mut stmt = conn.prepare(&sql)?;
-            let read_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Recovery> {
-                Ok(Recovery {
-                    pre_app: row.get(0)?,
-                    pre_activity: row.get(1)?,
-                    pre_page_fingerprint: row.get(2)?,
-                    failure_cause: row.get(3)?,
-                    recovery_category: row.get(4)?,
-                    recovery_op: row.get(5)?,
-                    recovery_args_json: row.get(6)?,
-                    success_count: row.get(7)?,
-                    failure_count: row.get(8)?,
-                    last_success_at: row.get(9)?,
-                })
-            };
             let rows = if let Some(fc) = failure_cause {
                 match scope {
                     "page" => stmt.query_map(
                         named_params! {":a": app, ":act": activity, ":fp": page_fingerprint, ":fc": fc},
-                        read_row,
+                        read_recovery_row,
                     )?,
                     "activity" => stmt.query_map(
                         named_params! {":a": app, ":act": activity, ":fp": page_fingerprint, ":fc": fc},
-                        read_row,
+                        read_recovery_row,
                     )?,
-                    _ => stmt.query_map(named_params! {":a": app, ":act": activity, ":fc": fc}, read_row)?,
+                    _ => stmt.query_map(
+                        named_params! {":a": app, ":act": activity, ":fc": fc},
+                        read_recovery_row,
+                    )?,
                 }
             } else {
                 match scope {
                     "page" => stmt.query_map(
                         named_params! {":a": app, ":act": activity, ":fp": page_fingerprint},
-                        read_row,
+                        read_recovery_row,
                     )?,
                     "activity" => stmt.query_map(
                         named_params! {":a": app, ":act": activity, ":fp": page_fingerprint},
-                        read_row,
+                        read_recovery_row,
                     )?,
-                    _ => stmt.query_map(named_params! {":a": app, ":act": activity}, read_row)?,
+                    _ => stmt.query_map(
+                        named_params! {":a": app, ":act": activity},
+                        read_recovery_row,
+                    )?,
                 }
             };
             for row in rows {
@@ -960,9 +900,7 @@ impl MemoryStore {
         query: Option<&str>,
         limit: usize,
     ) -> anyhow::Result<Vec<Note>> {
-        let mut sql = String::from(
-            "SELECT id, app, topic, content, session, created_at FROM notes WHERE 1=1",
-        );
+        let mut sql = select_notes_sql("WHERE 1=1");
         let mut bind_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
         let mut idx = 0usize;
         if let Some(v) = app {
@@ -1000,6 +938,22 @@ impl MemoryStore {
 
 // ── helpers ──
 
+fn select_events_sql(tail: &str) -> String {
+    format!("SELECT {EVENT_COLUMNS} FROM events {tail}")
+}
+
+fn select_transitions_sql(tail: &str) -> String {
+    format!("SELECT {TRANSITION_COLUMNS} FROM transitions {tail}")
+}
+
+fn select_recoveries_sql(tail: &str) -> String {
+    format!("SELECT {RECOVERY_COLUMNS} FROM recoveries {tail}")
+}
+
+fn select_notes_sql(tail: &str) -> String {
+    format!("SELECT {NOTE_COLUMNS} FROM notes {tail}")
+}
+
 fn read_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
     Ok(Event {
         id: row.get(0)?,
@@ -1016,6 +970,41 @@ fn read_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
         failure_cause: row.get(11)?,
         evidence_json: row.get(12)?,
         duration_ms: row.get(13)?,
+    })
+}
+
+fn read_transition_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Transition> {
+    Ok(Transition {
+        pre_app: row.get(0)?,
+        pre_activity: row.get(1)?,
+        pre_page_fingerprint: row.get(2)?,
+        action_category: row.get(3)?,
+        action_op: row.get(4)?,
+        action_args_json: row.get(5)?,
+        post_app: row.get(6)?,
+        post_activity: row.get(7)?,
+        post_page_fingerprint: row.get(8)?,
+        verify_op: row.get(9)?,
+        verify_args_json: row.get(10)?,
+        success_count: row.get(11)?,
+        verified_count: row.get(12)?,
+        failure_count: row.get(13)?,
+        last_success_at: row.get(14)?,
+    })
+}
+
+fn read_recovery_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Recovery> {
+    Ok(Recovery {
+        pre_app: row.get(0)?,
+        pre_activity: row.get(1)?,
+        pre_page_fingerprint: row.get(2)?,
+        failure_cause: row.get(3)?,
+        recovery_category: row.get(4)?,
+        recovery_op: row.get(5)?,
+        recovery_args_json: row.get(6)?,
+        success_count: row.get(7)?,
+        failure_count: row.get(8)?,
+        last_success_at: row.get(9)?,
     })
 }
 
@@ -1259,7 +1248,28 @@ mod tests {
             .expect("query");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "page");
-        assert_eq!(results[0].1.verified_count, 1);
+        let transition = &results[0].1;
+        assert_eq!(transition.pre_app, "com.a");
+        assert_eq!(transition.pre_activity, "com.a/.Main");
+        assert_eq!(transition.pre_page_fingerprint, pre.page_fingerprint);
+        assert_eq!(transition.action_category, "act");
+        assert_eq!(transition.action_op, "tap");
+        assert_eq!(
+            transition.action_args_json,
+            r#"{"by":"text","value":"Item"}"#
+        );
+        assert_eq!(transition.post_app, "com.a");
+        assert_eq!(transition.post_activity, "com.a/.Detail");
+        assert_eq!(transition.post_page_fingerprint, post.page_fingerprint);
+        assert_eq!(transition.verify_op, "text-contains");
+        assert_eq!(transition.verify_args_json, r#"{"text":"Detail"}"#);
+        assert_eq!(transition.success_count, 1);
+        assert_eq!(transition.verified_count, 1);
+        assert_eq!(transition.failure_count, 0);
+        assert_eq!(
+            transition.last_success_at.as_deref(),
+            Some("2026-04-03T10:00:01Z")
+        );
     }
 
     #[test]
@@ -1307,7 +1317,20 @@ mod tests {
             .expect("query");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "page");
-        assert_eq!(results[0].1.success_count, 1);
+        let recovery = &results[0].1;
+        assert_eq!(recovery.pre_app, "com.a");
+        assert_eq!(recovery.pre_activity, "com.a/.Main");
+        assert_eq!(recovery.pre_page_fingerprint, pre.page_fingerprint);
+        assert_eq!(recovery.failure_cause, "REF_ALIAS_STALE");
+        assert_eq!(recovery.recovery_category, "recover");
+        assert_eq!(recovery.recovery_op, "back");
+        assert_eq!(recovery.recovery_args_json, r#"{"times":1}"#);
+        assert_eq!(recovery.success_count, 1);
+        assert_eq!(recovery.failure_count, 0);
+        assert_eq!(
+            recovery.last_success_at.as_deref(),
+            Some("2026-04-03T10:00:02Z")
+        );
     }
 
     #[test]
@@ -1378,6 +1401,15 @@ mod tests {
             .previous_failed_event("s1", e3_id)
             .expect("query")
             .expect("should find original failure");
+        assert!(found.id > 0);
+        assert_eq!(found.session, "s1");
+        assert_eq!(found.app, "com.a");
+        assert_eq!(found.activity, "com.a/.Main");
+        assert_eq!(found.op, "test");
+        assert_eq!(found.args_json, "{}");
+        assert_eq!(found.status, "failed");
+        assert_eq!(found.evidence_json, "{}");
+        assert_eq!(found.duration_ms, 1);
         assert_eq!(
             found.category, "act",
             "should find the act failure, not recover"
