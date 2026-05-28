@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.5.1-rc.1] - 2026-05-28
+## [0.5.1] - 2026-05-28
 
-Range: `app-v0.5.0` / `cli-v0.5.0` .. `app-v0.5.1-rc.1` / `cli-v0.5.1-rc.1`
+Range: `app-v0.5.0` / `cli-v0.5.0` .. `app-v0.5.1` / `cli-v0.5.1`
 
 ### Fixed
 - Sign app release APKs in the GitHub release workflow and verify release artifacts with `apksigner` before publishing.

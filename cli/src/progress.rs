@@ -217,10 +217,10 @@ mod tests {
     #[test]
     fn disabled_reporter_writes_nothing() {
         let mut reporter = ProgressReporter::new(ProgressMode::Disabled, Vec::new());
-        reporter.download("0.5.1-rc.1", 1024, Some(2048));
-        reporter.finish_download("0.5.1-rc.1");
-        reporter.install_tick("0.5.1-rc.1");
-        reporter.finish_install("0.5.1-rc.1");
+        reporter.download("0.5.1", 1024, Some(2048));
+        reporter.finish_download("0.5.1");
+        reporter.install_tick("0.5.1");
+        reporter.finish_install("0.5.1");
         reporter.finish_with_error();
         assert!(reporter.into_inner().is_empty());
     }
@@ -228,23 +228,23 @@ mod tests {
     #[test]
     fn plain_reporter_writes_stage_lines() {
         let mut reporter = ProgressReporter::new(ProgressMode::Plain, Vec::new());
-        reporter.download("0.5.1-rc.1", 0, Some(100));
-        reporter.download("0.5.1-rc.1", 10, Some(100));
-        reporter.download("0.5.1-rc.1", 25, Some(100));
-        reporter.finish_download("0.5.1-rc.1");
-        reporter.install_tick("0.5.1-rc.1");
-        reporter.install_tick("0.5.1-rc.1");
-        reporter.finish_install("0.5.1-rc.1");
+        reporter.download("0.5.1", 0, Some(100));
+        reporter.download("0.5.1", 10, Some(100));
+        reporter.download("0.5.1", 25, Some(100));
+        reporter.finish_download("0.5.1");
+        reporter.install_tick("0.5.1");
+        reporter.install_tick("0.5.1");
+        reporter.finish_install("0.5.1");
 
         let output = String::from_utf8(reporter.into_inner()).expect("utf8 output");
         assert_eq!(
             output,
             concat!(
-                "Downloading APK 0.5.1-rc.1: 0% (0 B/100 B)\n",
-                "Downloading APK 0.5.1-rc.1: 25% (25 B/100 B)\n",
-                "Downloaded APK 0.5.1-rc.1\n",
-                "Installing APK 0.5.1-rc.1...\n",
-                "Installed APK 0.5.1-rc.1\n",
+                "Downloading APK 0.5.1: 0% (0 B/100 B)\n",
+                "Downloading APK 0.5.1: 25% (25 B/100 B)\n",
+                "Downloaded APK 0.5.1\n",
+                "Installing APK 0.5.1...\n",
+                "Installed APK 0.5.1\n",
             )
         );
     }
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn tty_error_finishes_active_line() {
         let mut reporter = ProgressReporter::new(ProgressMode::Tty, Vec::new());
-        reporter.install_tick("0.5.1-rc.1");
+        reporter.install_tick("0.5.1");
         reporter.finish_with_error();
         let output = String::from_utf8(reporter.into_inner()).expect("utf8 output");
         assert!(output.ends_with('\n'));
