@@ -1,15 +1,19 @@
 use std::cmp::Ordering;
 use std::env;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
 use std::time::Duration;
 
 use reqwest::blocking::Client;
 use serde_json::{Value, json};
 
-use crate::commands::adb::{run_adb, select_device};
+use crate::commands::adb::{adb_command_error, command_status_error, run_adb, select_device};
 use crate::core::error_code::ErrorCode;
 use crate::output::{CommandError, CommandResult};
+use crate::progress::{ProgressMode, ProgressReporter};
 
 const PACKAGE_NAME: &str = "com.memohai.autofish";
 const GITHUB_REPO: &str = "memohai/Autofish";
@@ -22,6 +26,7 @@ pub struct InstallOptions<'a> {
     pub version: &'a str,
     pub force: bool,
     pub dry_run: bool,
+    pub progress: ProgressMode,
 }
 
 pub struct UninstallOptions<'a> {
@@ -110,11 +115,14 @@ pub fn handle_install(options: InstallOptions<'_>) -> CommandResult {
         }));
     }
 
-    let downloaded = resolve_apk(&client, &target)?;
+    let mut progress = ProgressReporter::stderr(options.progress);
+    let downloaded = resolve_apk(&client, &target, &mut progress)?;
     adb_install(
         &device_serial,
         &downloaded.path,
+        &target.version,
         action == InstallAction::Downgrade,
+        &mut progress,
     )?;
     let installed_after = query_installed_app(&device_serial)?;
     let after_version = installed_after
@@ -242,7 +250,13 @@ fn query_installed_app(serial: &str) -> Result<Option<InstalledApp>, CommandErro
     Ok(parse_dumpsys_package(&stdout))
 }
 
-fn adb_install(serial: &str, apk_path: &Path, allow_downgrade: bool) -> Result<(), CommandError> {
+fn adb_install(
+    serial: &str,
+    apk_path: &Path,
+    version: &str,
+    allow_downgrade: bool,
+    progress: &mut ProgressReporter<impl Write>,
+) -> Result<(), CommandError> {
     let mut args = vec![
         "-s".to_string(),
         serial.to_string(),
@@ -253,7 +267,27 @@ fn adb_install(serial: &str, apk_path: &Path, allow_downgrade: bool) -> Result<(
         args.push("-d".to_string());
     }
     args.push(apk_path.display().to_string());
-    run_adb(args, "adb install failed")?;
+    let child = Command::new("adb")
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| adb_command_error("adb install failed", e))?;
+    progress.install_tick(version);
+    let output_handle = thread::spawn(move || child.wait_with_output());
+    while !output_handle.is_finished() {
+        progress.install_tick(version);
+        thread::sleep(Duration::from_millis(100));
+    }
+    let output = output_handle
+        .join()
+        .map_err(|_| CommandError::internal("adb install output collector panicked"))?
+        .map_err(|e| adb_command_error("adb install failed", e))?;
+    if !output.status.success() {
+        progress.finish_with_error();
+        return Err(command_status_error("adb install failed", &output));
+    }
+    progress.finish_install(version);
     Ok(())
 }
 
@@ -453,7 +487,11 @@ struct DownloadedApk {
     source: &'static str,
 }
 
-fn resolve_apk(client: &Client, target: &ReleaseAsset) -> Result<DownloadedApk, CommandError> {
+fn resolve_apk(
+    client: &Client,
+    target: &ReleaseAsset,
+    progress: &mut ProgressReporter<impl Write>,
+) -> Result<DownloadedApk, CommandError> {
     let cache_path = cache_path_for(&target.version, &target.asset)?;
     if cache_path.exists() {
         return Ok(DownloadedApk {
@@ -466,7 +504,13 @@ fn resolve_apk(client: &Client, target: &ReleaseAsset) -> Result<DownloadedApk, 
             .map_err(|e| CommandError::internal(format!("failed to create APK cache: {e}")))?;
     }
 
-    match download_to_cache(client, &target.github_url, &cache_path) {
+    match download_to_cache(
+        client,
+        &target.github_url,
+        &cache_path,
+        &target.version,
+        progress,
+    ) {
         Ok(()) => Ok(DownloadedApk {
             path: cache_path,
             source: "github",
@@ -480,18 +524,24 @@ fn resolve_apk(client: &Client, target: &ReleaseAsset) -> Result<DownloadedApk, 
                     CommandError::internal(format!("failed to create APK cache: {e}"))
                 })?;
             }
-            download_to_cache(client, &legacy_url, &legacy_cache_path)
-                .map(|()| DownloadedApk {
-                    path: legacy_cache_path,
-                    source: "github",
-                })
-                .map_err(|legacy_error| {
-                    download_error(
-                        &target.github_url,
-                        github_error,
-                        Some((&legacy_url, legacy_error)),
-                    )
-                })
+            download_to_cache(
+                client,
+                &legacy_url,
+                &legacy_cache_path,
+                &target.version,
+                progress,
+            )
+            .map(|()| DownloadedApk {
+                path: legacy_cache_path,
+                source: "github",
+            })
+            .map_err(|legacy_error| {
+                download_error(
+                    &target.github_url,
+                    github_error,
+                    Some((&legacy_url, legacy_error)),
+                )
+            })
         }
         Err(github_error) => Err(download_error(&target.github_url, github_error, None)),
     }
@@ -532,17 +582,44 @@ fn cache_path_for(version: &str, asset: &str) -> Result<PathBuf, CommandError> {
     Ok(base.join("app").join(version).join(asset))
 }
 
-fn download_to_cache(client: &Client, url: &str, cache_path: &Path) -> Result<(), String> {
-    let response = client.get(url).send().map_err(|e| e.to_string())?;
+fn download_to_cache(
+    client: &Client,
+    url: &str,
+    cache_path: &Path,
+    version: &str,
+    progress: &mut ProgressReporter<impl Write>,
+) -> Result<(), String> {
+    let mut response = client.get(url).send().map_err(|e| e.to_string())?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("HTTP {status}"));
     }
-    let bytes = response.bytes().map_err(|e| e.to_string())?;
+    let total = response.content_length();
     let tmp_path = cache_path.with_extension("apk.tmp");
-    fs::write(&tmp_path, bytes).map_err(|e| e.to_string())?;
-    fs::rename(&tmp_path, cache_path).map_err(|e| e.to_string())?;
-    Ok(())
+    let result = (|| {
+        let mut file = fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        let mut downloaded = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        progress.download(version, downloaded, total);
+        loop {
+            let read = response.read(&mut buffer).map_err(|e| e.to_string())?;
+            if read == 0 {
+                break;
+            }
+            file.write_all(&buffer[..read]).map_err(|e| e.to_string())?;
+            downloaded += read as u64;
+            progress.download(version, downloaded, total);
+        }
+        file.flush().map_err(|e| e.to_string())?;
+        fs::rename(&tmp_path, cache_path).map_err(|e| e.to_string())?;
+        progress.finish_download(version);
+        Ok(())
+    })();
+    if result.is_err() {
+        progress.finish_with_error();
+        let _ = fs::remove_file(&tmp_path);
+    }
+    result
 }
 
 fn network_error(message: String) -> CommandError {

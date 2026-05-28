@@ -3,7 +3,7 @@ use crate::artifact::ArtifactManager;
 use crate::builder::ReqClientBuilder;
 use crate::cli::{
     ActCommands, AppCommands, Cli, Commands, ConfigCommands, ConnectCommands, MemoryCommands,
-    ObserveCommands, OverlayCommands, RecoverCommands, VerifyCommands,
+    ObserveCommands, OutputFormat, OverlayCommands, RecoverCommands, VerifyCommands,
 };
 use crate::commands::observe::ScreenshotOptions;
 use crate::commands::{
@@ -18,6 +18,7 @@ use crate::memory_recording::{
     record_event_and_close, should_record_event, should_update_session_cache, update_session_cache,
 };
 use crate::output::into_output;
+use crate::progress::ProgressMode;
 use crossbeam_channel::Receiver;
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -277,7 +278,7 @@ pub fn run_command(
     }
 }
 
-pub fn run_app_command(invocation_id: &str, cli: &Cli) -> Value {
+pub fn run_app_command(invocation_id: &str, cli: &Cli, output: OutputFormat) -> Value {
     match &cli.command {
         Commands::App { command } => match command {
             AppCommands::Install {
@@ -294,6 +295,7 @@ pub fn run_app_command(invocation_id: &str, cli: &Cli) -> Value {
                     version,
                     force: *force,
                     dry_run: *dry_run,
+                    progress: ProgressMode::for_output(output),
                 }),
             ),
             AppCommands::Uninstall { device, dry_run } => into_output(

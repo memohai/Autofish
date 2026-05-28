@@ -12,6 +12,7 @@ Range: `app-v0.5.0` / `cli-v0.5.0` .. `app-v0.5.1-rc.1` / `cli-v0.5.1-rc.1`
 - Sign app release APKs in the GitHub release workflow and verify release artifacts with `apksigner` before publishing.
 - Verify debug APK signatures in Android CI so installability regressions are caught earlier.
 - Rename app APK artifacts from `auto-fish-*.apk` to `autofish-*.apk`, while keeping CLI install fallback support for older release asset names.
+- Show lightweight stderr progress for `af app install` downloads and adb install in text output, while keeping JSON output machine-readable.
 
 ## [0.5.0] - 2026-05-16
 

@@ -9,6 +9,7 @@ mod db;
 mod memory;
 mod memory_recording;
 mod output;
+mod progress;
 mod runner;
 
 use crate::builder::ReqClientBuilder;
@@ -104,7 +105,7 @@ fn main() -> anyhow::Result<()> {
         }
         crate::cli::Commands::App { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
-            run_app_command(&invocation_id, &cli)
+            run_app_command(&invocation_id, &cli, settings.output)
         }
         crate::cli::Commands::Connect { .. } => {
             let invocation_id = crate::builder::new_invocation_id();
