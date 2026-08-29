@@ -43,7 +43,7 @@ af app install --device <ADB_SERIAL>
 3. 在 Autofish 首页打开 **Service**。
 4. 从首页连接信息卡片复制 `af config` 命令，或复制原始 `IP` / `PORT` / `TOKEN`。
 
-如果无法使用 adb，也可以从 [GitHub Releases](https://github.com/memohai/Autofish/releases) 手动安装最新 APK。
+如果无法使用 adb，也可以从 [GitHub Releases](https://github.com/felinics/Autofish/releases) 手动安装最新 APK。
 
 Shizuku 设置：
 

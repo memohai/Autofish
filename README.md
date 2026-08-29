@@ -44,7 +44,7 @@ Then open Autofish on the Android device:
 3. Turn on **Service** from the Autofish home page.
 4. Copy the `af config` commands or raw `IP` / `PORT` / `TOKEN` from the home page connection card.
 
-If adb is not available, install the latest APK manually from [GitHub Releases](https://github.com/memohai/Autofish/releases).
+If adb is not available, install the latest APK manually from [GitHub Releases](https://github.com/felinics/Autofish/releases).
 
 Shizuku setup:
 

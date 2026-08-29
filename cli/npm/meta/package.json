@@ -5,11 +5,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/memohai/Autofish.git"
+    "url": "git+https://github.com/felinics/Autofish.git"
   },
-  "homepage": "https://github.com/memohai/Autofish",
+  "homepage": "https://github.com/felinics/Autofish",
   "bugs": {
-    "url": "https://github.com/memohai/Autofish/issues"
+    "url": "https://github.com/felinics/Autofish/issues"
   },
   "bin": {
     "af": "bin/af.js"

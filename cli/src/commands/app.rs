@@ -16,9 +16,9 @@ use crate::output::{CommandError, CommandResult};
 use crate::progress::{ProgressMode, ProgressReporter};
 
 const PACKAGE_NAME: &str = "com.memohai.autofish";
-const GITHUB_REPO: &str = "memohai/Autofish";
-const DOWNLOAD_BASE: &str = "https://github.com/memohai/Autofish/releases/download";
-const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/memohai/Autofish/releases";
+const GITHUB_REPO: &str = "felinics/Autofish";
+const DOWNLOAD_BASE: &str = "https://github.com/felinics/Autofish/releases/download";
+const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/felinics/Autofish/releases";
 const USER_AGENT: &str = concat!("af/", env!("CARGO_PKG_VERSION"));
 
 pub struct InstallOptions<'a> {
@@ -644,7 +644,7 @@ mod tests {
         assert_eq!(release.asset, "autofish-0.4.0-release.apk");
         assert_eq!(
             release.github_url,
-            "https://github.com/memohai/Autofish/releases/download/app-v0.4.0/autofish-0.4.0-release.apk"
+            "https://github.com/felinics/Autofish/releases/download/app-v0.4.0/autofish-0.4.0-release.apk"
         );
     }
 

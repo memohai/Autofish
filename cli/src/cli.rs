@@ -114,7 +114,7 @@ const CLI_ABOUT: &str = concat!(
     "It provides deterministic commands for observing screens, tapping refs,\n",
     "verifying state, managing local tool memory, installing the Autofish Android\n",
     "app, and configuring USB forwarding.\n\n",
-    "Project home page: https://github.com/memohai/Autofish"
+    "Project home page: https://github.com/felinics/Autofish"
 );
 
 #[derive(Parser, Debug)]

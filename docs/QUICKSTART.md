@@ -10,7 +10,7 @@ npm i -g @memohjs/af
 
 ## 2. Install the Android app
 
-Install the latest APK from [GitHub Releases](https://github.com/memohai/Autofish/releases).
+Install the latest APK from [GitHub Releases](https://github.com/felinics/Autofish/releases).
 
 If the device is connected with adb, the CLI can install the matching official App release:
 
